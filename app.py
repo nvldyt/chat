@@ -45,6 +45,34 @@ st.markdown(
         color: #e2e8f0 !important;
     }
 
+    /* Không được ép font lên icon (Material Symbols) của Streamlit,
+       nếu không icon "upload" sẽ vỡ ra thành chữ thường chồng chữ */
+    [data-testid="stIconMaterial"] {
+        font-family: 'Material Symbols Outlined' !important;
+        color: #dcb8ff !important;
+    }
+
+    /* Chữ "Drag and drop file here / Limit ... per file" trong khung upload */
+    [data-testid="stFileUploadDropzoneInstructions"] div,
+    [data-testid="stFileUploadDropzoneInstructions"] span {
+        color: #cbd5e1 !important;
+    }
+    [data-testid="stFileUploadDropzoneInstructions"] small {
+        color: #9ca3af !important;
+    }
+
+    /* Nút "Browse files" bên trong khung upload */
+    [data-testid="stFileUploadDropzone"] button {
+        background-color: #374151 !important;
+        color: #e2e8f0 !important;
+        border: 1px solid #4b5563 !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover {
+        border-color: #dcb8ff !important;
+        color: #dcb8ff !important;
+    }
+
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
