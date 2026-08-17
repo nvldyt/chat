@@ -1,0 +1,13 @@
+[server]
+# Giới hạn dung lượng upload thực sự ở cấp server (tính bằng MB).
+# Đồng bộ với MAX_FILE_SIZE_BYTES trong app.py để nhãn hiển thị
+# ("Limit 15MB per file") khớp với giới hạn thật, và để Streamlit
+# tự chặn ngay từ tầng upload thay vì chỉ kiểm tra sau khi đã tải xong.
+maxUploadSize = 15
+
+[theme]
+base = "dark"
+primaryColor = "#dcb8ff"
+backgroundColor = "#111319"
+secondaryBackgroundColor = "#1f2937"
+textColor = "#e2e8f0"
