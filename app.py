@@ -1,4 +1,3 @@
-
 import streamlit as st
 import uuid
 import json
@@ -7,60 +6,107 @@ from cryptography.fernet import Fernet
 import urllib.parse
 
 # ============================================================
-# TẠO KHÔNG GIAN BỘ NHỚ TẠM (RAM) - KHÔNG GHI VÀO Ổ CỨNG
+# TẠO KHÔNG GIAN BỘ NHỚ TẠM (RAM)
 # ============================================================
 @st.cache_resource
 def get_memory_store():
-    # Dữ liệu chỉ tồn tại trên RAM của máy chủ
     return {}
 
 store = get_memory_store()
 
 # ============================================================
-# CẤU HÌNH GIAO DIỆN
+# CẤU HÌNH GIAO DIỆN & PHÔNG CHỮ ARIAL
 # ============================================================
 st.set_page_config(page_title="Mật Thư Tự Hủy", page_icon="🔥", layout="centered")
 
-# Lấy các tham số (ID và KEY) từ trên thanh địa chỉ URL (Nếu có)
+st.markdown(
+    """
+    <style>
+        /* Đổi toàn bộ phông chữ sang Arial */
+        html, body, [class*="css"], p, h1, h2, h3, h4, h5, h6, span, div, label, li, .stMarkdown {
+            font-family: 'Arial', sans-serif !important;
+        }
+        
+        /* Hiệu ứng bo tròn và đổ bóng cho các hộp nội dung */
+        .stTextArea textarea {
+            border-radius: 12px !important;
+            border: 1px solid #d1d5db !important;
+            background-color: #f9fafb !important;
+            font-size: 15px !important;
+        }
+        .stTextArea textarea:focus {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+        }
+        
+        /* Chỉnh nút bấm mượt mà hơn */
+        div.stButton > button {
+            border-radius: 8px !important;
+            font-weight: bold !important;
+            transition: all 0.2s ease !important;
+        }
+        div.stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #ef4444, #f97316) !important;
+            border: none !important;
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3) !important;
+        }
+        div.stButton > button[kind="primary"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(239, 68, 68, 0.4) !important;
+        }
+        
+        /* Khung cảnh báo / Thông báo */
+        .stAlert {
+            border-radius: 10px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Lấy các tham số (ID và KEY) từ thanh địa chỉ URL
 query_params = st.query_params
 url_id = query_params.get("id")
 url_key = query_params.get("key")
 
 # ============================================================
-# LUỒNG 1: GIAO DIỆN NGƯỜI NHẬN (KHI HỌ BẤM VÀO LINK CÓ CHỨA ID VÀ KEY)
+# LUỒNG 1: GIAO DIỆN NGƯỜI NHẬN
 # ============================================================
 if url_id and url_key:
     st.title("🔓 Đang mở Mật Thư...")
     
-    # Kiểm tra xem bưu kiện còn trên RAM không
     if url_id not in store:
-        st.error("❌ Mật thư này không tồn tại, hoặc ĐÃ BỊ AI ĐÓ ĐỌC VÀ TIÊU HỦY TRƯỚC ĐÓ!")
+        st.error("❌ Mật thư này không tồn tại, hoặc ĐÃ BỊ ĐỌC VÀ TIÊU HỦY TRƯỚC ĐÓ!")
     else:
-        # ==========================================
-        # LÕI BẢO MẬT: LẤY DỮ LIỆU RA VÀ XÓA SẠCH LUÔN KHỎI RAM (POP)
-        # ==========================================
+        # Lấy dữ liệu ra và xóa sạch khỏi RAM (POP)
         encrypted_data = store.pop(url_id)
         
         try:
-            # Dùng Key từ URL để mở khóa
+            # Dùng Key mở khóa
             cipher_suite = Fernet(url_key.encode('utf-8'))
             decrypted_json = cipher_suite.decrypt(encrypted_data)
             
             # Bung gói dữ liệu
             payload_dict = json.loads(decrypted_json.decode('utf-8'))
-            msg_type = payload_dict["type"]
-            raw_data = base64.b64decode(payload_dict["data"])
+            msg_text = payload_dict.get("text", "")
+            filename = payload_dict.get("filename", "")
+            filedata_b64 = payload_dict.get("filedata", "")
             
-            st.success("✅ Giải mã thành công! Mật thư này vừa bị bốc hơi vĩnh viễn khỏi máy chủ.")
-            st.warning("⚠️ LƯU Ý: Hãy đọc hoặc tải file ngay bây giờ. Nếu bạn F5 (Tải lại trang), dữ liệu sẽ mất trắng!")
+            st.success("✅ Giải mã thành công! Mật thư này vừa bốc hơi vĩnh viễn khỏi máy chủ.")
+            st.warning("⚠️ LƯU Ý: Hãy lưu lại thông tin ngay bây giờ. Nếu bạn tải lại trang (F5), dữ liệu sẽ mất trắng!")
             
-            if msg_type == "text":
-                st.text_area("Nội dung bí mật của bạn:", value=raw_data.decode('utf-8'), height=300)
-            elif msg_type == "file":
-                filename = payload_dict["filename"]
-                st.write(f"📁 **Tên file:** `{filename}`")
+            st.write("---")
+            # Hiển thị Text nếu có
+            if msg_text:
+                st.markdown("### 📝 Tin nhắn:")
+                st.text_area("Nội dung:", value=msg_text, height=200, disabled=True)
+            
+            # Hiển thị File nếu có
+            if filedata_b64 and filename:
+                st.markdown("### 📁 File đính kèm:")
+                raw_data = base64.b64decode(filedata_b64)
                 st.download_button(
-                    label="⬇️ Bấm để tải File xuống máy",
+                    label=f"⬇️ Tải file: {filename}",
                     data=raw_data,
                     file_name=filename,
                     mime="application/octet-stream",
@@ -69,75 +115,67 @@ if url_id and url_key:
                 
         except Exception as e:
             st.error("❌ Đường link bị hỏng hoặc thuật toán giải mã thất bại!")
-            # Trả lại file vào RAM nếu lỗi thuật toán để không mất oan dữ liệu
-            store[url_id] = encrypted_data
+            store[url_id] = encrypted_data # Trả lại file vào RAM nếu lỗi
             
     st.write("---")
-    if st.button("Về trang chủ tạo mật thư mới"):
-        # Xóa ID và KEY trên thanh URL để quay về giao diện gốc
+    if st.button("Về trang chủ"):
         st.query_params.clear()
         st.rerun()
 
 # ============================================================
-# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ BÌNH THƯỜNG)
+# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ)
 # ============================================================
 else:
     st.title("🔥 Bưu Cục Tự Hủy")
-    st.markdown("Hệ thống chia sẻ File/Tin nhắn dùng **1 lần duy nhất**. Tự động hủy diệt vật lý trên máy chủ ngay khi người nhận truy cập.")
+    st.markdown("Hệ thống chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động hủy diệt vật lý trên máy chủ ngay khi người nhận truy cập.")
     
-    # Để tạo được link chuẩn xác, app cần biết link gốc của chính nó
-    base_url = st.text_input(
-        "🔗 Đường dẫn gốc của ứng dụng (Anh hãy Copy link web hiện tại trên thanh địa chỉ dán vào đây):", 
-        value="https://ten-app-cua-anh.streamlit.app"
-    )
+    with st.expander("⚙️ Cài đặt đường dẫn (Bấm để mở)"):
+        base_url = st.text_input(
+            "🔗 Đường dẫn gốc của ứng dụng:", 
+            value="https://phongchat.streamlit.app"
+        )
     
     st.write("---")
-    msg_type = st.radio("Loại dữ liệu muốn gửi:", ["Văn bản (Text)", "File / Tài liệu đính kèm"])
+    st.markdown("### Đóng gói dữ liệu")
     
-    data_payload = None
-    filename = None
-    
-    if msg_type == "Văn bản (Text)":
-        text_input = st.text_area("Nhập nội dung bí mật:")
-        if text_input:
-            data_payload = text_input.encode('utf-8')
-    else:
-        uploaded_file = st.file_uploader("Chọn file cần gửi (Khuyên dùng < 50MB)")
-        if uploaded_file:
-            data_payload = uploaded_file.read()
-            filename = uploaded_file.name
+    # Cho phép nhập cả chữ và file
+    text_input = st.text_area("Nhập nội dung bí mật (Không bắt buộc):", height=150)
+    uploaded_file = st.file_uploader("Đính kèm File (Không bắt buộc, khuyên dùng < 50MB):")
 
     if st.button("🚀 Tạo Link Mật Thư", type="primary"):
-        if not data_payload:
-            st.warning("Vui lòng nhập nội dung hoặc chọn file.")
-        elif "ten-app-cua-anh" in base_url:
-            st.warning("⚠️ Anh hãy sửa ô 'Đường dẫn gốc của ứng dụng' thành link web thật của anh nhé!")
+        if not text_input.strip() and not uploaded_file:
+            st.warning("Vui lòng nhập ít nhất một tin nhắn hoặc chọn một file!")
         else:
             # 1. TẠO KHÓA & ID CHO MẬT THƯ
             key = Fernet.generate_key()
             msg_id = str(uuid.uuid4())
             
-            # 2. ĐÓNG GÓI DỮ LIỆU
+            # 2. XỬ LÝ FILE (NẾU CÓ)
+            file_b64 = ""
+            filename = ""
+            if uploaded_file:
+                file_b64 = base64.b64encode(uploaded_file.read()).decode('utf-8')
+                filename = uploaded_file.name
+            
+            # 3. ĐÓNG GÓI CẢ TEXT VÀ FILE VÀO CHUNG 1 PAYLOAD
             payload_dict = {
-                "type": "text" if msg_type == "Văn bản (Text)" else "file",
+                "text": text_input.strip(),
                 "filename": filename,
-                "data": base64.b64encode(data_payload).decode('utf-8')
+                "filedata": file_b64
             }
             
-            # 3. MÃ HÓA CHUẨN AES-256 VÀ NÉM LÊN RAM
+            # 4. MÃ HÓA CHUẨN AES-256 VÀ NÉM LÊN RAM
             cipher_suite = Fernet(key)
             encrypted_data = cipher_suite.encrypt(json.dumps(payload_dict).encode('utf-8'))
             store[msg_id] = encrypted_data
             
-            # 4. TẠO ĐƯỜNG LINK GỬI ĐI (Chứa cả ID và KEY)
+            # 5. TẠO ĐƯỜNG LINK GỬI ĐI
             clean_base_url = base_url.strip().rstrip('/')
             params = {"id": msg_id, "key": key.decode('utf-8')}
             full_link = f"{clean_base_url}/?{urllib.parse.urlencode(params)}"
             
             st.success("✅ Đã đóng gói và mã hóa thành công!")
-            st.info("💡 COPY đường link dưới đây và gửi qua Zalo cho đối tác. Họ chỉ việc click vào là đọc được!")
+            st.info("💡 COPY đường link dưới đây và gửi cho đối tác.")
             
-            # Hiển thị Link để copy
             st.code(full_link, language="text")
-            st.caption("Ngay khi có người bấm vào link này, khối dữ liệu lơ lửng trên RAM máy chủ sẽ bị rút cạn và xóa sạch vĩnh viễn.")
-    
+            st.caption("Ngay khi có người bấm vào link này, khối dữ liệu sẽ bị rút cạn và xóa sạch vĩnh viễn.")
