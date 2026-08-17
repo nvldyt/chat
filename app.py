@@ -15,15 +15,15 @@ def get_memory_store():
 store = get_memory_store()
 
 # ============================================================
-# CẤU HÌNH GIAO DIỆN & PHÔNG CHỮ ARIAL
+# CẤU HÌNH GIAO DIỆN & SỬA LỖI PHÔNG CHỮ ICON
 # ============================================================
 st.set_page_config(page_title="Mật Thư Tự Hủy", page_icon="🔥", layout="centered")
 
 st.markdown(
     """
     <style>
-        /* Đổi toàn bộ phông chữ sang Arial */
-        html, body, [class*="css"], p, h1, h2, h3, h4, h5, h6, span, div, label, li, .stMarkdown {
+        /* Chỉ áp dụng Arial cho văn bản thuần túy, giữ nguyên thẻ hệ thống để không lỗi icon */
+        html, body, p, h1, h2, h3, h4, h5, h6, label, li, .stMarkdown, textarea, input {
             font-family: 'Arial', sans-serif !important;
         }
         
@@ -78,15 +78,12 @@ if url_id and url_key:
     if url_id not in store:
         st.error("❌ Mật thư này không tồn tại, hoặc ĐÃ BỊ ĐỌC VÀ TIÊU HỦY TRƯỚC ĐÓ!")
     else:
-        # Lấy dữ liệu ra và xóa sạch khỏi RAM (POP)
         encrypted_data = store.pop(url_id)
         
         try:
-            # Dùng Key mở khóa
             cipher_suite = Fernet(url_key.encode('utf-8'))
             decrypted_json = cipher_suite.decrypt(encrypted_data)
             
-            # Bung gói dữ liệu
             payload_dict = json.loads(decrypted_json.decode('utf-8'))
             msg_text = payload_dict.get("text", "")
             filename = payload_dict.get("filename", "")
@@ -96,12 +93,10 @@ if url_id and url_key:
             st.warning("⚠️ LƯU Ý: Hãy lưu lại thông tin ngay bây giờ. Nếu bạn tải lại trang (F5), dữ liệu sẽ mất trắng!")
             
             st.write("---")
-            # Hiển thị Text nếu có
             if msg_text:
                 st.markdown("### 📝 Tin nhắn:")
                 st.text_area("Nội dung:", value=msg_text, height=200, disabled=True)
             
-            # Hiển thị File nếu có
             if filedata_b64 and filename:
                 st.markdown("### 📁 File đính kèm:")
                 raw_data = base64.b64decode(filedata_b64)
@@ -115,7 +110,7 @@ if url_id and url_key:
                 
         except Exception as e:
             st.error("❌ Đường link bị hỏng hoặc thuật toán giải mã thất bại!")
-            store[url_id] = encrypted_data # Trả lại file vào RAM nếu lỗi
+            store[url_id] = encrypted_data
             
     st.write("---")
     if st.button("Về trang chủ"):
@@ -138,7 +133,6 @@ else:
     st.write("---")
     st.markdown("### Đóng gói dữ liệu")
     
-    # Cho phép nhập cả chữ và file
     text_input = st.text_area("Nhập nội dung bí mật (Không bắt buộc):", height=150)
     uploaded_file = st.file_uploader("Đính kèm File (Không bắt buộc, khuyên dùng < 50MB):")
 
@@ -146,30 +140,25 @@ else:
         if not text_input.strip() and not uploaded_file:
             st.warning("Vui lòng nhập ít nhất một tin nhắn hoặc chọn một file!")
         else:
-            # 1. TẠO KHÓA & ID CHO MẬT THƯ
             key = Fernet.generate_key()
             msg_id = str(uuid.uuid4())
             
-            # 2. XỬ LÝ FILE (NẾU CÓ)
             file_b64 = ""
             filename = ""
             if uploaded_file:
                 file_b64 = base64.b64encode(uploaded_file.read()).decode('utf-8')
                 filename = uploaded_file.name
             
-            # 3. ĐÓNG GÓI CẢ TEXT VÀ FILE VÀO CHUNG 1 PAYLOAD
             payload_dict = {
                 "text": text_input.strip(),
                 "filename": filename,
                 "filedata": file_b64
             }
             
-            # 4. MÃ HÓA CHUẨN AES-256 VÀ NÉM LÊN RAM
             cipher_suite = Fernet(key)
             encrypted_data = cipher_suite.encrypt(json.dumps(payload_dict).encode('utf-8'))
             store[msg_id] = encrypted_data
             
-            # 5. TẠO ĐƯỜNG LINK GỬI ĐI
             clean_base_url = base_url.strip().rstrip('/')
             params = {"id": msg_id, "key": key.decode('utf-8')}
             full_link = f"{clean_base_url}/?{urllib.parse.urlencode(params)}"
