@@ -119,14 +119,12 @@ if url_id and url_key:
                 st.markdown("### 📝 Nội dung tin nhắn:")
                 st.markdown(f'<div class="message-box">{msg_text}</div>', unsafe_allow_html=True)
             
-            # Hiển thị File và Nút tải về lớn
+            # Hiển thị gộp thành 1 nút tải file duy nhất và gọn gàng
             if filedata_b64 and filename:
                 st.markdown("### 📁 Tệp đính kèm:")
-                st.markdown(f'<div class="file-box">📎 Tệp: {filename}</div>', unsafe_allow_html=True)
-                
                 raw_data = base64.b64decode(filedata_b64)
                 st.download_button(
-                    label=f"⬇️ BẤM VÀO ĐÂY ĐỂ TẢI FILE ({filename})",
+                    label=f"📎 Tải xuống tệp: {filename}",
                     data=raw_data,
                     file_name=filename,
                     mime="application/octet-stream",
