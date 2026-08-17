@@ -17,7 +17,7 @@ store = get_memory_store()
 # ============================================================
 # CẤU HÌNH GIAO DIỆN & PHÔNG CHỮ ARIAL
 # ============================================================
-st.set_page_config(page_title="Mật Thư Tự Hủy", page_icon="🔥", layout="centered")
+st.set_page_config(page_title="CHAT", page_icon="🔥", layout="centered")
 
 st.markdown(
     """
