@@ -121,7 +121,7 @@ if url_id and url_key:
 # LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ)
 # ============================================================
 else:
-    st.title("🔥 Bưu Cục Tự Hủy")
+    st.title("🔥 HỆ THỐNG TỰ ĐỘNG HỦY TIN NHẮN VA FILE DỮ LIỆU SAU KHI TẢI")
     st.markdown("Hệ thống chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động hủy diệt vật lý trên máy chủ ngay khi người nhận truy cập.")
     
     with st.expander("⚙️ Cài đặt đường dẫn (Bấm để mở)"):
