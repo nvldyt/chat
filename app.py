@@ -22,42 +22,62 @@ st.set_page_config(page_title="Mật Thư Tự Hủy", page_icon="🔥", layout=
 st.markdown(
     """
     <style>
-        /* Áp dụng Arial cho toàn bộ văn bản thuần túy */
+        /* Toàn bộ văn bản dùng Arial */
         html, body, p, h1, h2, h3, h4, h5, h6, label, li, .stMarkdown, textarea, input {
             font-family: 'Arial', sans-serif !important;
         }
         
-        /* Hiệu ứng bo tròn và đổ bóng cho các hộp nội dung */
+        /* Hiệu ứng ô nhập dữ liệu */
         .stTextArea textarea {
             border-radius: 12px !important;
-            border: 1px solid #d1d5db !important;
-            background-color: #f9fafb !important;
-            font-size: 15px !important;
-        }
-        .stTextArea textarea:focus {
-            border-color: #ef4444 !important;
-            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+            border: 1px solid #cbd5e1 !important;
+            background-color: #f8fafc !important;
+            font-size: 16px !important;
         }
         
-        /* Chỉnh nút bấm mượt mà hơn */
+        /* Nút bấm cỡ lớn & hiệu ứng chuyển màu */
         div.stButton > button {
-            border-radius: 8px !important;
+            border-radius: 10px !important;
             font-weight: bold !important;
+            font-size: 16px !important;
+            padding: 12px 24px !important;
             transition: all 0.2s ease !important;
         }
         div.stButton > button[kind="primary"] {
             background: linear-gradient(135deg, #ef4444, #f97316) !important;
             border: none !important;
-            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3) !important;
+            color: white !important;
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3) !important;
         }
         div.stButton > button[kind="primary"]:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 10px rgba(239, 68, 68, 0.4) !important;
+            box-shadow: 0 6px 14px rgba(239, 68, 68, 0.4) !important;
         }
         
-        /* Khung cảnh báo */
-        .stAlert {
-            border-radius: 10px !important;
+        /* Khung hiển thị nội dung tin nhắn cho người nhận */
+        .message-box {
+            background-color: #f1f5f9;
+            border: 2px solid #cbd5e1;
+            border-radius: 14px;
+            padding: 20px 24px;
+            font-size: 19px !important;
+            font-weight: 700 !important;
+            color: #0f172a !important;
+            line-height: 1.6 !important;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        /* Khung chứa thông tin file đính kèm */
+        .file-box {
+            background-color: #f0fdf4;
+            border: 2px solid #86efac;
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 15px;
+            font-size: 17px !important;
+            font-weight: bold !important;
+            color: #166534 !important;
         }
     </style>
     """,
@@ -70,10 +90,10 @@ url_id = query_params.get("id")
 url_key = query_params.get("key")
 
 # ============================================================
-# LUỒNG 1: GIAO DIỆN NGƯỜI NHẬN
+# LUỒNG 1: GIAO DIỆN NGƯỜI NHẬN (ĐÃ NÂNG CẤP CHỮ TO & NÚT TẢI LỚN)
 # ============================================================
 if url_id and url_key:
-    st.title("🔓 Đang mở Mật Thư...")
+    st.title("🔓 Mật Thư Của Bạn")
     
     if url_id not in store:
         st.error("❌ Mật thư này không tồn tại, hoặc ĐÃ BỊ ĐỌC VÀ TIÊU HỦY TRƯỚC ĐÓ!")
@@ -89,23 +109,29 @@ if url_id and url_key:
             filename = payload_dict.get("filename", "")
             filedata_b64 = payload_dict.get("filedata", "")
             
-            st.success("✅ Giải mã thành công! Mật thư này vừa bốc hơi vĩnh viễn khỏi máy chủ.")
-            st.warning("⚠️ LƯU Ý: Hãy lưu lại thông tin ngay bây giờ. Nếu bạn tải lại trang (F5), dữ liệu sẽ mất trắng!")
+            st.success("✅ Mật thư đã mở thành công và bị xóa vĩnh viễn khỏi máy chủ!")
+            st.warning("⚠️ LƯU Ý: Vui lòng đọc nội dung và tải file ngay bây giờ. Nếu tải lại trang (F5), dữ liệu sẽ mất hoàn toàn!")
             
             st.write("---")
-            if msg_text:
-                st.markdown("### 📝 Tin nhắn:")
-                st.text_area("Nội dung:", value=msg_text, height=200, disabled=True)
             
+            # Hiển thị Tin nhắn (Chữ to, đậm, rõ nét)
+            if msg_text:
+                st.markdown("### 📝 Nội dung tin nhắn:")
+                st.markdown(f'<div class="message-box">{msg_text}</div>', unsafe_allow_html=True)
+            
+            # Hiển thị File và Nút tải về lớn
             if filedata_b64 and filename:
-                st.markdown("### 📁 File đính kèm:")
+                st.markdown("### 📁 Tệp đính kèm:")
+                st.markdown(f'<div class="file-box">📎 Tệp: {filename}</div>', unsafe_allow_html=True)
+                
                 raw_data = base64.b64decode(filedata_b64)
                 st.download_button(
-                    label=f"⬇️ Tải file: {filename}",
+                    label=f"⬇️ BẤM VÀO ĐÂY ĐỂ TẢI FILE ({filename})",
                     data=raw_data,
                     file_name=filename,
                     mime="application/octet-stream",
-                    type="primary"
+                    type="primary",
+                    use_container_width=True
                 )
                 
         except Exception as e:
@@ -113,24 +139,24 @@ if url_id and url_key:
             store[url_id] = encrypted_data
             
     st.write("---")
-    if st.button("Về trang chủ"):
+    if st.button("Về trang chủ", use_container_width=True):
         st.query_params.clear()
         st.rerun()
 
 # ============================================================
-# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ ĐÃ THU GỌN TIÊU ĐỀ)
+# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ)
 # ============================================================
 else:
     st.title("🔥 HỆ THỐNG TỰ HỦY DỮ LIỆU")
     st.markdown("Chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động xóa vĩnh viễn ngay khi người nhận truy cập.")
     
     st.write("---")
-    st.markdown("### Đóng gói dữ liệu")
+    st.markdown("### 📦 Đóng gói dữ liệu")
     
     text_input = st.text_area("Nhập nội dung bí mật (Không bắt buộc):", height=150)
     uploaded_file = st.file_uploader("Đính kèm File (Không bắt buộc, khuyên dùng < 50MB):")
 
-    if st.button("🚀 Tạo Link Mật Thư", type="primary"):
+    if st.button("🚀 Tạo Link Mật Thư", type="primary", use_container_width=True):
         if not text_input.strip() and not uploaded_file:
             st.warning("Vui lòng nhập ít nhất một tin nhắn hoặc chọn một file!")
         else:
