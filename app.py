@@ -3,8 +3,6 @@ import uuid
 import json
 import base64
 import hashlib
-import hmac
-import secrets
 import html
 import urllib.parse
 from datetime import datetime, timezone
@@ -131,24 +129,6 @@ st.markdown(
         color: #1e3a8a;
     }
 
-    .warning-box {
-        background-color: #fff7ed;
-        border: 2px solid #fdba74;
-        border-radius: 14px;
-        padding: 16px 20px;
-        margin: 15px 0;
-        color: #9a3412;
-    }
-
-    .pin-box {
-        background-color: #fefce8;
-        border: 2px solid #fde047;
-        border-radius: 14px;
-        padding: 18px 20px;
-        margin: 15px 0;
-        text-align: center;
-    }
-
     </style>
     """,
     unsafe_allow_html=True,
@@ -161,10 +141,6 @@ st.markdown(
 
 @st.cache_resource
 def get_redis_connection():
-    """
-    st.cache_resource chỉ dùng để cache CONNECTION.
-    Không dùng nó để lưu dữ liệu tin nhắn.
-    """
     try:
         redis_url = st.secrets["REDIS_URL"]
     except Exception:
@@ -204,31 +180,6 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def pin_hash(pin: str) -> str:
-    """
-    Dùng PEPPER nằm trong Streamlit Secrets.
-    Không lưu PIN dạng plaintext.
-    """
-    try:
-        pepper = st.secrets["PIN_PEPPER"]
-    except Exception:
-        # Trường hợp không sử dụng PIN thì hàm này không được gọi.
-        raise RuntimeError("Thiếu PIN_PEPPER trong Streamlit Secrets.")
-
-    return hmac.new(
-        pepper.encode("utf-8"),
-        pin.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def generate_pin() -> str:
-    """
-    PIN 6 chữ số ngẫu nhiên.
-    """
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
 def format_size(size_bytes: int) -> str:
     if size_bytes < 1024:
         return f"{size_bytes} B"
@@ -248,13 +199,7 @@ def valid_uuid(value: str) -> bool:
 
 
 # ============================================================
-# LUA SCRIPT
-#
-# Kiểm tra secret_hash + pin_hash rồi mới:
-#   1. lấy payload
-#   2. xóa record
-#
-# Điều này giúp thao tác "mở 1 lần" mang tính nguyên tử.
+# LUA SCRIPT (NGUYÊN TỬ HÓA: KIỂM TRA HASH VÀ XÓA LUÔN)
 # ============================================================
 
 ATOMIC_CONSUME_SCRIPT = """
@@ -266,20 +211,6 @@ end
 
 if stored_secret_hash ~= ARGV[1] then
     return false
-end
-
-local stored_pin_hash = redis.call("HGET", KEYS[1], "pin_hash")
-local supplied_pin_hash = ARGV[2]
-
-if stored_pin_hash ~= "" then
-
-    if supplied_pin_hash == "" then
-        return false
-    end
-
-    if stored_pin_hash ~= supplied_pin_hash then
-        return false
-    end
 end
 
 local payload = redis.call("HGET", KEYS[1], "payload")
@@ -302,32 +233,9 @@ def create_secret(
     message_text: str,
     uploaded_file,
     ttl_seconds: int,
-    use_pin: bool,
 ):
-    # --------------------------------------------------------
-    # ID
-    # --------------------------------------------------------
-
     message_id = str(uuid.uuid4())
-
-    # --------------------------------------------------------
-    # SECRET KEY
-    # --------------------------------------------------------
-
     secret_key = Fernet.generate_key()
-
-    # --------------------------------------------------------
-    # PIN
-    # --------------------------------------------------------
-
-    generated_pin = None
-
-    if use_pin:
-        generated_pin = generate_pin()
-
-    # --------------------------------------------------------
-    # FILE
-    # --------------------------------------------------------
 
     file_b64 = ""
     filename = ""
@@ -335,7 +243,6 @@ def create_secret(
     file_size = 0
 
     if uploaded_file is not None:
-
         file_size = uploaded_file.size or 0
 
         if file_size > MAX_FILE_SIZE_BYTES:
@@ -344,14 +251,9 @@ def create_secret(
             )
 
         raw_file = uploaded_file.getvalue()
-
         file_b64 = base64.b64encode(raw_file).decode("ascii")
         filename = uploaded_file.name
         mime_type = uploaded_file.type or "application/octet-stream"
-
-    # --------------------------------------------------------
-    # PAYLOAD
-    # --------------------------------------------------------
 
     payload = {
         "version": 2,
@@ -369,27 +271,9 @@ def create_secret(
         separators=(",", ":"),
     ).encode("utf-8")
 
-    # --------------------------------------------------------
-    # ENCRYPT
-    # --------------------------------------------------------
-
     cipher = Fernet(secret_key)
     encrypted_payload = cipher.encrypt(plaintext)
-
-    # --------------------------------------------------------
-    # HASH SECRET
-    # --------------------------------------------------------
-
     secret_hash = sha256_hex(secret_key)
-
-    if use_pin:
-        stored_pin_hash = pin_hash(generated_pin)
-    else:
-        stored_pin_hash = ""
-
-    # --------------------------------------------------------
-    # LƯU REDIS
-    # --------------------------------------------------------
 
     redis_record = redis_key(message_id)
 
@@ -397,17 +281,11 @@ def create_secret(
         redis_record,
         mapping={
             b"secret_hash": secret_hash.encode("ascii"),
-            b"pin_hash": stored_pin_hash.encode("ascii"),
             b"payload": encrypted_payload,
         },
     )
 
-    # TTL
     rdb.expire(redis_record, ttl_seconds)
-
-    # --------------------------------------------------------
-    # TẠO URL
-    # --------------------------------------------------------
 
     params = {
         "id": message_id,
@@ -423,7 +301,6 @@ def create_secret(
     return {
         "message_id": message_id,
         "link": link,
-        "pin": generated_pin,
         "ttl_seconds": ttl_seconds,
     }
 
@@ -432,12 +309,7 @@ def create_secret(
 # LẤY VÀ XÓA SECRET
 # ============================================================
 
-def consume_secret(
-    message_id: str,
-    secret: str,
-    supplied_pin: str = "",
-):
-
+def consume_secret(message_id: str, secret: str):
     if not valid_uuid(message_id):
         return None, "ID không hợp lệ."
 
@@ -446,27 +318,12 @@ def consume_secret(
     except Exception:
         return None, "Secret không hợp lệ."
 
-    # Fernet key phải hợp lệ
     try:
         Fernet(secret_bytes)
     except Exception:
         return None, "Secret không hợp lệ."
 
     calculated_secret_hash = sha256_hex(secret_bytes)
-
-    if supplied_pin:
-        supplied_pin = supplied_pin.strip()
-
-        if not (
-            supplied_pin.isdigit()
-            and len(supplied_pin) == 6
-        ):
-            return None, "PIN phải gồm đúng 6 chữ số."
-
-        supplied_pin_hash = pin_hash(supplied_pin)
-    else:
-        supplied_pin_hash = ""
-
     key = redis_key(message_id)
 
     try:
@@ -475,33 +332,19 @@ def consume_secret(
             1,
             key,
             calculated_secret_hash,
-            supplied_pin_hash,
         )
-
     except Exception:
         return None, "Lỗi kết nối máy chủ."
 
     if not encrypted_payload:
-        return None, "Link không tồn tại, đã hết hạn, đã được mở hoặc PIN không đúng."
-
-    # --------------------------------------------------------
-    # GIẢI MÃ
-    # --------------------------------------------------------
+        return None, "Link không tồn tại, đã hết hạn hoặc đã được mở trước đó."
 
     try:
         cipher = Fernet(secret_bytes)
-
-        decrypted = cipher.decrypt(
-            encrypted_payload
-        )
-
-        payload = json.loads(
-            decrypted.decode("utf-8")
-        )
-
+        decrypted = cipher.decrypt(encrypted_payload)
+        payload = json.loads(decrypted.decode("utf-8"))
     except InvalidToken:
         return None, "Không thể xác thực dữ liệu."
-
     except Exception:
         return None, "Dữ liệu không hợp lệ."
 
@@ -513,7 +356,6 @@ def consume_secret(
 # ============================================================
 
 def revoke_secret(message_id: str) -> bool:
-
     if not valid_uuid(message_id):
         return False
 
@@ -530,9 +372,6 @@ def revoke_secret(message_id: str) -> bool:
 
 if "generated_link" not in st.session_state:
     st.session_state.generated_link = ""
-
-if "generated_pin" not in st.session_state:
-    st.session_state.generated_pin = ""
 
 if "generated_message_id" not in st.session_state:
     st.session_state.generated_message_id = ""
@@ -564,166 +403,82 @@ if url_id and url_secret:
         <div class="security-box">
         🔐 Dữ liệu được mã hóa riêng cho link này.
         <br>
-        🗑️ Link chỉ có thể được sử dụng một lần.
+        🗑️ Link chỉ có thể được mở và xem đúng một lần duy nhất.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # --------------------------------------------------------
-    # Cho phép nhập PIN nếu link yêu cầu.
-    #
-    # Vì server chỉ lưu hash PIN nên không thể biết trước
-    # link có PIN hay không chỉ từ URL.
-    # Người dùng nhập PIN nếu link người gửi có đặt PIN.
-    # --------------------------------------------------------
+    # Tự động mở tin nhắn ngay khi người dùng click vào link (Không cần bấm nút mở hay nhập PIN)
+    payload, error_message = consume_secret(url_id, url_secret)
 
-    supplied_pin = ""
-
-    with st.expander("🔐 Link có PIN? Nhập PIN tại đây"):
-
-        supplied_pin = st.text_input(
-            "PIN 6 chữ số:",
-            type="password",
-            max_chars=6,
-            placeholder="Nhập PIN nếu người gửi cung cấp",
+    if error_message:
+        st.error(f"❌ {error_message}")
+    else:
+        st.success("✅ Tin nhắn đã được mở thành công.")
+        st.warning(
+            "⚠️ Tin nhắn đã tự động bị xóa vĩnh viễn khỏi máy chủ. "
+            "Vui lòng lưu lại nội dung hoặc tải tệp ngay bây giờ, không tải lại trang này!"
         )
 
-    # --------------------------------------------------------
-    # Mở tin nhắn
-    # --------------------------------------------------------
+        st.write("---")
 
-    if st.button(
-        "🔓 MỞ TIN NHẮN",
-        type="primary",
-        use_container_width=True,
-    ):
+        # ----------------------------------------------------
+        # MESSAGE
+        # ----------------------------------------------------
+        msg_text = payload.get("text", "")
 
-        payload, error_message = consume_secret(
-            url_id,
-            url_secret,
-            supplied_pin,
-        )
-
-        if error_message:
-
-            st.error(f"❌ {error_message}")
-
-        else:
-
-            st.success(
-                "✅ Tin nhắn đã được mở thành công."
+        if msg_text:
+            st.markdown("### 📝 Nội dung tin nhắn:")
+            safe_text = html.escape(msg_text)
+            st.markdown(
+                f"""
+                <div class="message-box">
+                {safe_text}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            st.warning(
-                "⚠️ Tin nhắn đã được xóa khỏi máy chủ "
-                "ngay sau khi được mở. Không tải lại trang "
-                "nếu bạn chưa lưu tệp."
+        # ----------------------------------------------------
+        # FILE
+        # ----------------------------------------------------
+        filename = payload.get("filename", "")
+        filedata_b64 = payload.get("filedata", "")
+        mime_type = payload.get("mime_type", "application/octet-stream")
+        file_size = payload.get("filesize", 0)
+
+        if filename and filedata_b64:
+            st.markdown("### 📁 Tệp đính kèm:")
+            safe_filename = html.escape(filename)
+
+            st.markdown(
+                f"""
+                <div class="file-box">
+                📎 {safe_filename}
+                <br>
+                💾 {format_size(file_size)}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            st.write("---")
-
-            # ------------------------------------------------
-            # MESSAGE
-            # ------------------------------------------------
-
-            msg_text = payload.get("text", "")
-
-            if msg_text:
-
-                st.markdown(
-                    "### 📝 Nội dung tin nhắn:"
+            try:
+                raw_data = base64.b64decode(filedata_b64, validate=True)
+                st.download_button(
+                    label=f"📎 Tải xuống tệp: {filename}",
+                    data=raw_data,
+                    file_name=filename,
+                    mime=mime_type,
+                    type="primary",
+                    use_container_width=True,
                 )
-
-                # QUAN TRỌNG:
-                # Escape dữ liệu người dùng để tránh XSS.
-                safe_text = html.escape(
-                    msg_text
-                )
-
-                st.markdown(
-                    f"""
-                    <div class="message-box">
-                    {safe_text}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            # ------------------------------------------------
-            # FILE
-            # ------------------------------------------------
-
-            filename = payload.get(
-                "filename",
-                "",
-            )
-
-            filedata_b64 = payload.get(
-                "filedata",
-                "",
-            )
-
-            mime_type = payload.get(
-                "mime_type",
-                "application/octet-stream",
-            )
-
-            file_size = payload.get(
-                "filesize",
-                0,
-            )
-
-            if filename and filedata_b64:
-
-                st.markdown(
-                    "### 📁 Tệp đính kèm:"
-                )
-
-                safe_filename = html.escape(
-                    filename
-                )
-
-                st.markdown(
-                    f"""
-                    <div class="file-box">
-                    📎 {safe_filename}
-                    <br>
-                    💾 {format_size(file_size)}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                try:
-
-                    raw_data = base64.b64decode(
-                        filedata_b64,
-                        validate=True,
-                    )
-
-                    st.download_button(
-                        label=f"📥 TẢI XUỐNG: {filename}",
-                        data=raw_data,
-                        file_name=filename,
-                        mime=mime_type,
-                        type="primary",
-                        use_container_width=True,
-                    )
-
-                except Exception:
-
-                    st.error(
-                        "❌ Không thể đọc tệp đính kèm."
-                    )
+            except Exception:
+                st.error("❌ Không thể đọc tệp đính kèm.")
 
     st.write("---")
 
-    if st.button(
-        "🏠 Về trang chủ",
-        use_container_width=True,
-    ):
-
+    if st.button("🏠 Về trang chủ", use_container_width=True):
         st.query_params.clear()
         st.rerun()
 
@@ -738,19 +493,14 @@ else:
 
     st.markdown(
         """
-        Gửi **tin nhắn và tệp một lần**.
-        Dữ liệu được mã hóa trước khi lưu vào Redis
-        và tự động hết hạn sau thời gian bạn chọn.
+        Gửi **tin nhắn và tệp một lần**. 
+        Dữ liệu được mã hóa bảo mật tuyệt đối và tự động xóa sạch ngay sau khi người nhận bấm vào link.
         """
     )
 
     st.write("---")
 
     st.markdown("### 📦 Tạo tin nhắn")
-
-    # --------------------------------------------------------
-    # MESSAGE
-    # --------------------------------------------------------
 
     text_input = st.text_area(
         "📝 Nội dung tin nhắn:",
@@ -759,35 +509,16 @@ else:
         placeholder="Nhập nội dung cần gửi...",
     )
 
-    # --------------------------------------------------------
-    # FILE
-    # --------------------------------------------------------
-
     uploaded_file = st.file_uploader(
         f"📎 Đính kèm File (tối đa {MAX_FILE_SIZE_MB} MB):",
     )
 
     if uploaded_file:
-
         if uploaded_file.size > MAX_FILE_SIZE_BYTES:
-
-            st.error(
-                f"❌ File vượt quá "
-                f"{MAX_FILE_SIZE_MB} MB."
-            )
-
+            st.error(f"❌ File vượt quá giới hạn {MAX_FILE_SIZE_MB} MB.")
             uploaded_file = None
-
         else:
-
-            st.info(
-                f"📁 {uploaded_file.name} — "
-                f"{format_size(uploaded_file.size)}"
-            )
-
-    # --------------------------------------------------------
-    # TTL
-    # --------------------------------------------------------
+            st.info(f"📁 {uploaded_file.name} — {format_size(uploaded_file.size)}")
 
     st.markdown("### ⏱ Thời hạn link")
 
@@ -799,218 +530,73 @@ else:
 
     ttl_seconds = TTL_OPTIONS[ttl_label]
 
-    # --------------------------------------------------------
-    # PIN
-    # --------------------------------------------------------
+    st.write("---")
 
-    st.markdown("### 🔐 Bảo vệ bằng PIN")
-
-    use_pin = st.checkbox(
-        "Yêu cầu PIN khi mở link",
-        value=False,
-    )
-
-    if use_pin:
-
-        st.info(
-            "PIN sẽ không nằm trong đường link. "
-            "Bạn cần gửi PIN riêng cho người nhận."
-        )
-
-    # --------------------------------------------------------
-    # CREATE
-    # --------------------------------------------------------
-
-    if st.button(
-        "🚀 TẠO LINK BẢO MẬT",
-        type="primary",
-        use_container_width=True,
-    ):
-
-        # Kiểm tra nội dung
-        if (
-            not text_input.strip()
-            and uploaded_file is None
-        ):
-
-            st.warning(
-                "Vui lòng nhập tin nhắn hoặc chọn một file."
-            )
-
+    if st.button("🚀 TẠO LINK BẢO MẬT", type="primary", use_container_width=True):
+        if not text_input.strip() and uploaded_file is None:
+            st.warning("Vui lòng nhập tin nhắn hoặc chọn một file.")
         elif len(text_input) > MAX_MESSAGE_LENGTH:
-
-            st.error(
-                f"Nội dung vượt quá "
-                f"{MAX_MESSAGE_LENGTH:,} ký tự."
-            )
-
+            st.error(f"Nội dung vượt quá {MAX_MESSAGE_LENGTH:,} ký tự.")
         else:
-
             try:
-
                 result = create_secret(
                     message_text=text_input,
                     uploaded_file=uploaded_file,
                     ttl_seconds=ttl_seconds,
-                    use_pin=use_pin,
                 )
 
-                # Lưu thông tin giao diện vào session
-                st.session_state.generated_link = (
-                    result["link"]
-                )
+                st.session_state.generated_link = result["link"]
+                st.session_state.generated_message_id = result["message_id"]
+                st.session_state.generated_ttl = result["ttl_seconds"]
 
-                st.session_state.generated_pin = (
-                    result["pin"] or ""
-                )
-
-                st.session_state.generated_message_id = (
-                    result["message_id"]
-                )
-
-                st.session_state.generated_ttl = (
-                    result["ttl_seconds"]
-                )
-
-                st.success(
-                    "✅ Đã mã hóa và lưu an toàn."
-                )
+                st.success("✅ Đã mã hóa và lưu an toàn.")
 
             except Exception as exc:
-
-                st.error(
-                    "❌ Không thể tạo link."
-                )
-
-                st.code(
-                    str(exc)
-                )
-
-    # --------------------------------------------------------
-    # HIỂN THỊ LINK
-    # --------------------------------------------------------
+                st.error("❌ Không thể tạo link.")
+                st.code(str(exc))
 
     if st.session_state.generated_link:
-
         st.write("---")
-
-        st.markdown(
-            "### 🔗 LINK CỦA BẠN"
-        )
-
-        st.success(
-            "✅ Link đã được tạo thành công."
-        )
-
-        st.code(
-            st.session_state.generated_link,
-            language="text",
-        )
-
-        st.info(
-            "💡 Copy toàn bộ link và gửi cho người nhận."
-        )
-
-        # ----------------------------------------------------
-        # PIN
-        # ----------------------------------------------------
-
-        if st.session_state.generated_pin:
-
-            st.markdown(
-                f"""
-                <div class="pin-box">
-                    <div style="font-size:16px;">
-                        🔐 PIN mở tin nhắn
-                    </div>
-                    <div style="
-                        font-size:34px;
-                        font-weight:800;
-                        letter-spacing:8px;
-                        margin-top:8px;
-                    ">
-                        {st.session_state.generated_pin}
-                    </div>
-                    <div style="
-                        font-size:14px;
-                        margin-top:8px;
-                    ">
-                        Không gửi PIN cùng với link nếu
-                        cần tăng mức bảo mật.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        # ----------------------------------------------------
-        # THỜI GIAN
-        # ----------------------------------------------------
+        st.markdown("### 🔗 LINK CỦA BẠN")
+        st.success("✅ Link đã được tạo thành công.")
+        
+        st.code(st.session_state.generated_link, language="text")
+        st.info("💡 Copy toàn bộ link và gửi trực tiếp cho người nhận.")
 
         ttl = st.session_state.generated_ttl
 
         if ttl < 3600:
-
             ttl_display = f"{ttl // 60} phút"
-
         elif ttl < 86400:
-
             ttl_display = f"{ttl // 3600} giờ"
-
         else:
-
             ttl_display = "24 giờ"
 
         st.markdown(
             f"""
             <div class="security-box">
-            🔐 Mã hóa: Fernet
+            🔐 Mã hóa: Fernet AES-256
             <br>
-            ⏱ Thời hạn: {ttl_display}
+            ⏱ Thời hạn link: {ttl_display}
             <br>
-            👤 Số lần mở tối đa: 1
+            👤 Số lần mở tối đa: 1 lần duy nhất
             <br>
-            🗑️ Sau khi mở: xóa khỏi Redis
+            🗑️ Trạng thái: Tự hủy ngay lập tức sau khi đọc
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # ----------------------------------------------------
-        # REVOKE
-        # ----------------------------------------------------
-
-        if st.button(
-            "🗑️ HỦY LINK NGAY",
-            use_container_width=True,
-        ):
-
-            deleted = revoke_secret(
-                st.session_state.generated_message_id
-            )
+        if st.button("🗑️ HỦY LINK NGAY", use_container_width=True):
+            deleted = revoke_secret(st.session_state.generated_message_id)
 
             if deleted:
-
-                st.success(
-                    "✅ Link đã bị hủy."
-                )
-
+                st.success("✅ Link đã bị hủy thành công.")
             else:
+                st.info("Link không còn tồn tại hoặc đã được mở trước đó.")
 
-                st.info(
-                    "Link không còn tồn tại "
-                    "hoặc đã được mở."
-                )
-
-            # Reset
             st.session_state.generated_link = ""
-            st.session_state.generated_pin = ""
             st.session_state.generated_message_id = ""
             st.session_state.generated_ttl = 0
 
             st.rerun()
-
-        st.caption(
-            "⚠️ Không gửi lại PIN trong cùng một kênh "
-            "với link nếu tài liệu nhạy cảm."
-        )
