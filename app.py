@@ -15,14 +15,14 @@ def get_memory_store():
 store = get_memory_store()
 
 # ============================================================
-# CẤU HÌNH GIAO DIỆN & SỬA LỖI PHÔNG CHỮ ICON
+# CẤU HÌNH GIAO DIỆN & PHÔNG CHỮ ARIAL
 # ============================================================
 st.set_page_config(page_title="Mật Thư Tự Hủy", page_icon="🔥", layout="centered")
 
 st.markdown(
     """
     <style>
-        /* Chỉ áp dụng Arial cho văn bản thuần túy, giữ nguyên thẻ hệ thống để không lỗi icon */
+        /* Áp dụng Arial cho toàn bộ văn bản thuần túy */
         html, body, p, h1, h2, h3, h4, h5, h6, label, li, .stMarkdown, textarea, input {
             font-family: 'Arial', sans-serif !important;
         }
@@ -55,7 +55,7 @@ st.markdown(
             box-shadow: 0 6px 10px rgba(239, 68, 68, 0.4) !important;
         }
         
-        /* Khung cảnh báo / Thông báo */
+        /* Khung cảnh báo */
         .stAlert {
             border-radius: 10px !important;
         }
@@ -118,17 +118,11 @@ if url_id and url_key:
         st.rerun()
 
 # ============================================================
-# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ)
+# LUỒNG 2: GIAO DIỆN NGƯỜI GỬI (TRANG CHỦ ĐÃ THU GỌN TIÊU ĐỀ)
 # ============================================================
 else:
-    st.title("🔥 HỆ THỐNG TỰ ĐỘNG HỦY TIN NHẮN VA FILE DỮ LIỆU SAU KHI TẢI")
-    st.markdown("Hệ thống chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động hủy diệt vật lý trên máy chủ ngay khi người nhận truy cập.")
-    
-    with st.expander("⚙️ Cài đặt đường dẫn (Bấm để mở)"):
-        base_url = st.text_input(
-            "🔗 Đường dẫn gốc của ứng dụng:", 
-            value="https://phongchat.streamlit.app"
-        )
+    st.title("🔥 HỆ THỐNG TỰ HỦY DỮ LIỆU")
+    st.markdown("Chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động xóa vĩnh viễn ngay khi người nhận truy cập.")
     
     st.write("---")
     st.markdown("### Đóng gói dữ liệu")
@@ -159,6 +153,7 @@ else:
             encrypted_data = cipher_suite.encrypt(json.dumps(payload_dict).encode('utf-8'))
             store[msg_id] = encrypted_data
             
+            base_url = "https://phongchat.streamlit.app"
             clean_base_url = base_url.strip().rstrip('/')
             params = {"id": msg_id, "key": key.decode('utf-8')}
             full_link = f"{clean_base_url}/?{urllib.parse.urlencode(params)}"
