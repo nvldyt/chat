@@ -183,12 +183,19 @@ store = get_memory_store()
 
 
 def cleanup_expired_entries():
-    """Dọn các link đã quá hạn (không ai mở) để tránh rò rỉ bộ nhớ."""
+    """Dọn các link đã quá hạn (không ai mở) để tránh rò rỉ bộ nhớ.
+
+    Cũng dọn luôn các entry ở định dạng cũ (từ trước khi TTL được thêm vào),
+    vì st.cache_resource giữ nguyên dữ liệu qua các lần deploy code mới.
+    """
     now = time.time()
-    expired_ids = [
-        mid for mid, entry in store.items()
-        if now - entry["created"] > LINK_TTL_SECONDS
-    ]
+    expired_ids = []
+    for mid, entry in store.items():
+        if not isinstance(entry, dict) or "created" not in entry or "data" not in entry:
+            expired_ids.append(mid)
+            continue
+        if now - entry["created"] > LINK_TTL_SECONDS:
+            expired_ids.append(mid)
     for mid in expired_ids:
         store.pop(mid, None)
 
@@ -275,8 +282,8 @@ if url_id and url_secret:
     else:
         encrypted_entry = store.pop(url_id, None)
 
-        if encrypted_entry is None:
-            st.error("❌ Dữ liệu vừa bị lấy đi hoặc đã hết hạn.")
+        if not isinstance(encrypted_entry, dict) or "data" not in encrypted_entry:
+            st.error("❌ Dữ liệu vừa bị lấy đi, đã hết hạn hoặc không hợp lệ.")
         else:
             try:
                 cipher = Fernet(url_secret.encode("ascii"))
