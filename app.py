@@ -109,8 +109,8 @@ if url_id and url_key:
             filename = payload_dict.get("filename", "")
             filedata_b64 = payload_dict.get("filedata", "")
             
-            st.success("✅ Mật thư đã mở thành công và bị xóa vĩnh viễn khỏi máy chủ!")
-            st.warning("⚠️ LƯU Ý: Vui lòng đọc nội dung và tải file ngay bây giờ. Nếu tải lại trang (F5), dữ liệu sẽ mất hoàn toàn!")
+            st.success("✅ Tin nhắn đã mở thành công và bị xóa vĩnh viễn khỏi máy chủ!")
+            st.warning("⚠️ Vui lòng đọc nội dung và tải file ngay bây giờ. Nếu tải lại trang dữ liệu sẽ mất hoàn toàn!")
             
             st.write("---")
             
