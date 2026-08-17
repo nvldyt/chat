@@ -34,7 +34,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CSS GIAO DIỆN (PHÔNG ARIAL, GỌN GÀNG, HIỆN ĐẠI)
+# CSS GIAO DIỆN (ĐÃ CĂN GIỮA NỘI DUNG TIN NHẮN)
 # ============================================================
 
 st.markdown(
@@ -73,6 +73,7 @@ st.markdown(
         box-shadow: 0 6px 14px rgba(239, 68, 68, 0.4) !important;
     }
 
+    /* Đã căn giữa nội dung tin nhắn */
     .message-box {
         background-color: #f1f5f9;
         border: 2px solid #cbd5e1;
@@ -85,17 +86,7 @@ st.markdown(
         white-space: pre-wrap;
         word-break: break-word;
         margin-bottom: 20px;
-    }
-
-    .file-box {
-        background-color: #f0fdf4;
-        border: 2px solid #86efac;
-        border-radius: 14px;
-        padding: 16px 20px;
-        margin-bottom: 15px;
-        font-size: 17px !important;
-        font-weight: bold !important;
-        color: #166534 !important;
+        text-align: center !important; 
     }
 
     .security-box {
@@ -185,7 +176,7 @@ if url_id and url_secret:
     if not valid_uuid(url_id) or url_id not in store:
         st.error("❌ Tin nhắn không tồn tại, đã hết hạn hoặc ĐÃ BỊ MỞ VÀ TIÊU HỦY TRƯỚC ĐÓ!")
     else:
-        # Lấy dữ liệu ra và xóa sạch vĩnh viễn khỏi RAM ngay lập tức (Atomic Pop)
+        # Lấy dữ liệu ra và xóa sạch vĩnh viễn khỏi RAM ngay lập tức
         encrypted_data = store.pop(url_id)
 
         try:
@@ -201,7 +192,7 @@ if url_id and url_secret:
 
             st.write("---")
 
-            # Hiển thị Tin nhắn
+            # Hiển thị Tin nhắn (Đã căn giữa)
             msg_text = payload.get("text", "")
             if msg_text:
                 st.markdown("### 📝 Nội dung tin nhắn:")
@@ -215,27 +206,13 @@ if url_id and url_secret:
                     unsafe_allow_html=True,
                 )
 
-            # Hiển thị File & Nút tải về
+            # Hiển thị Tệp đính kèm (Đã gộp gọn thành 1 nút tải duy nhất)
             filename = payload.get("filename", "")
             filedata_b64 = payload.get("filedata", "")
             mime_type = payload.get("mime_type", "application/octet-stream")
-            file_size = payload.get("filesize", 0)
 
             if filename and filedata_b64:
                 st.markdown("### 📁 Tệp đính kèm:")
-                safe_filename = html.escape(filename)
-
-                st.markdown(
-                    f"""
-                    <div class="file-box">
-                    📎 {safe_filename}
-                    <br>
-                    💾 {format_size(file_size)}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
                 try:
                     raw_data = base64.b64decode(filedata_b64, validate=True)
                     st.download_button(
@@ -334,7 +311,7 @@ else:
                 cipher = Fernet(secret_key)
                 encrypted_payload = cipher.encrypt(plaintext)
 
-                # Lưu thẳng vào RAM (store)
+                # Lưu vào RAM
                 store[message_id] = encrypted_payload
 
                 params = {
