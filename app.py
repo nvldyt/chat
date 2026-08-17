@@ -3,6 +3,7 @@ import uuid
 import json
 import base64
 import html
+import time
 import urllib.parse
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -12,6 +13,10 @@ from cryptography.fernet import Fernet, InvalidToken
 
 APP_TITLE = "Chia Sẻ Bảo Mật"
 BASE_URL = "https://phongchat.streamlit.app"
+
+MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024      # 15 MB — giới hạn thật, có kiểm tra
+LINK_TTL_SECONDS = 24 * 60 * 60             # Link tự hết hạn sau 24h nếu không ai mở
+MAX_STORE_ENTRIES = 200                     # Chặn spam làm đầy RAM server
 
 # ============================================================
 # CẤU HÌNH STREAMLIT
@@ -25,33 +30,57 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN CHUẨN "WORMHOLE STYLE"
+# CSS GIAO DIỆN
 # ============================================================
 
 st.markdown(
     """
     <style>
-    /* Bắt buộc giao diện Dark Mode toàn nền */
     .stApp {
-        background-color: #111319 !important;
+        background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
-    
-    /* Phông chữ tổng thể màu sáng */
+
     html, body, p, div, span, label, li {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    /* Tiêu đề hồng tím nổi bật đặc trưng của Wormhole */
     h1, h2, h3 {
-        color: #ff2e93 !important;
+        background: linear-gradient(90deg, #ff2e93, #dcb8ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         font-weight: 800 !important;
         letter-spacing: -0.5px !important;
     }
 
-    /* Tùy chỉnh khung Upload file nét đứt giống giao diện kéo thả */
+    .subtitle {
+        color: #9ca3af;
+        font-size: 16px;
+        margin-bottom: 26px;
+        line-height: 1.55;
+    }
+
+    .badge-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 22px;
+    }
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(220, 184, 255, 0.08);
+        border: 1px solid rgba(220, 184, 255, 0.25);
+        color: #dcb8ff !important;
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 13px !important;
+        font-weight: 600;
+    }
+
     [data-testid="stFileUploadDropzone"] {
-        background-color: transparent !important;
+        background-color: rgba(255,255,255,0.02) !important;
         border: 2px dashed #4b5563 !important;
         border-radius: 16px !important;
         padding: 40px 20px !important;
@@ -61,8 +90,7 @@ st.markdown(
         border-color: #ff2e93 !important;
         background-color: rgba(255, 46, 147, 0.05) !important;
     }
-    
-    /* Ô nhập tin nhắn */
+
     .stTextArea textarea {
         background-color: #1f2937 !important;
         border: 1px solid #374151 !important;
@@ -75,11 +103,10 @@ st.markdown(
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
-    /* Nút bấm (Màu tím nhạt chữ đen giống nút Select files to send) */
     div.stButton > button {
-        background-color: #dcb8ff !important;
+        background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
-        border-radius: 8px !important;
+        border-radius: 10px !important;
         font-weight: 700 !important;
         font-size: 16px !important;
         padding: 12px 24px !important;
@@ -87,13 +114,12 @@ st.markdown(
         transition: all 0.2s ease !important;
     }
     div.stButton > button:hover {
-        background-color: #e9d5ff !important;
+        filter: brightness(1.08);
         transform: translateY(-2px);
     }
-    
-    /* Nút bấm phụ (Hủy link) */
+
     div.stButton > button[kind="secondary"] {
-        background-color: transparent !important;
+        background: transparent !important;
         color: #9ca3af !important;
         border: 1px solid #4b5563 !important;
     }
@@ -102,34 +128,41 @@ st.markdown(
         border-color: #ef4444 !important;
     }
 
-    /* Khung code hiển thị Link */
     .stCodeBlock {
         background-color: #1f2937 !important;
         border: 1px solid #374151 !important;
         border-radius: 8px !important;
     }
 
-    /* Khung cảnh báo */
     .stAlert {
-        background-color: rgba(31, 41, 55, 0.8) !important;
+        background-color: rgba(31, 41, 55, 0.85) !important;
         color: #e2e8f0 !important;
         border: 1px solid #374151 !important;
         border-radius: 12px !important;
     }
 
-    /* Căn giữa chữ trong khung hiển thị tin nhắn */
     .message-box {
         background-color: #1f2937;
         border: 1px solid #374151;
-        border-radius: 12px;
-        padding: 24px;
+        border-radius: 14px;
+        padding: 26px;
         font-size: 18px !important;
         color: #f8fafc !important;
         line-height: 1.6 !important;
         white-space: pre-wrap;
         word-break: break-word;
         margin-bottom: 20px;
-        text-align: center !important; 
+        text-align: center !important;
+        box-shadow: 0 8px 30px rgba(255, 46, 147, 0.08);
+    }
+
+    .reveal-card {
+        background: rgba(31, 41, 55, 0.6);
+        border: 1px solid #374151;
+        border-radius: 16px;
+        padding: 32px 24px;
+        text-align: center;
+        margin-bottom: 20px;
     }
     </style>
     """,
@@ -139,6 +172,7 @@ st.markdown(
 
 # ============================================================
 # BỘ NHỚ RAM TẠM THỜI (STORE)
+# Mỗi entry: message_id -> {"data": bytes_mahoa, "created": timestamp}
 # ============================================================
 
 @st.cache_resource
@@ -146,6 +180,27 @@ def get_memory_store():
     return {}
 
 store = get_memory_store()
+
+
+def cleanup_expired_entries():
+    """Dọn các link đã quá hạn (không ai mở) để tránh rò rỉ bộ nhớ."""
+    now = time.time()
+    expired_ids = [
+        mid for mid, entry in store.items()
+        if now - entry["created"] > LINK_TTL_SECONDS
+    ]
+    for mid in expired_ids:
+        store.pop(mid, None)
+
+
+def enforce_store_capacity():
+    """Chặn spam tạo link vô hạn: nếu đầy, xoá entry cũ nhất trước."""
+    if len(store) >= MAX_STORE_ENTRIES:
+        oldest_id = min(store, key=lambda mid: store[mid]["created"])
+        store.pop(oldest_id, None)
+
+
+cleanup_expired_entries()
 
 
 # ============================================================
@@ -163,6 +218,8 @@ if "generated_link" not in st.session_state:
     st.session_state.generated_link = ""
 if "generated_message_id" not in st.session_state:
     st.session_state.generated_message_id = ""
+if "confirmed_reveal" not in st.session_state:
+    st.session_state.confirmed_reveal = False
 
 
 # ============================================================
@@ -180,71 +237,86 @@ url_secret = query_params.get("secret", "")
 
 if url_id and url_secret:
 
-    st.title("You've got a file!")
-    
+    st.title("📬 Bạn có một tin nhắn bảo mật!")
+
     st.markdown(
         """
-        <p style='color: #9ca3af; font-size: 16px;'>
-        Hệ thống cho phép bạn chia sẻ dữ liệu với <b>mã hóa đầu cuối (end-to-end encryption)</b> 
-        và đường link sẽ <b>tự động hủy</b>. Đảm bảo dữ liệu của bạn không tồn tại vĩnh viễn trên Internet.
+        <p class="subtitle">
+        Hệ thống chia sẻ dữ liệu với <b>mã hóa đầu cuối (end-to-end encryption)</b>
+        và đường link sẽ <b>tự động hủy ngay sau khi được mở</b>.
         </p>
-        """, 
+        """,
         unsafe_allow_html=True
     )
 
+    # Bước xác nhận thủ công trước khi giải mã / tiêu huỷ dữ liệu.
+    # Mục đích: chặn các bot quét link (preview link của Zalo/Messenger/Slack...)
+    # vô tình mở trang và "đốt" mất nội dung trước khi người nhận thật sự bấm vào.
     if url_id not in store:
-        st.error("❌ Dữ liệu không tồn tại, đã hết hạn hoặc ĐÃ BỊ XÓA trước đó.")
+        st.error("❌ Dữ liệu không tồn tại, đã hết hạn (sau 24h) hoặc ĐÃ ĐƯỢC XEM trước đó.")
+
+    elif not st.session_state.confirmed_reveal:
+        st.markdown(
+            """
+            <div class="reveal-card">
+                <div style="font-size:40px; margin-bottom:10px;">🔒</div>
+                <div style="font-size:16px; color:#9ca3af;">
+                    Nội dung đang được mã hóa an toàn.<br>
+                    Nhấn nút bên dưới để giải mã và xem — dữ liệu sẽ bị xóa vĩnh viễn ngay sau đó.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("🔓 Giải mã & Xem nội dung", type="primary", use_container_width=True):
+            st.session_state.confirmed_reveal = True
+            st.rerun()
+
     else:
-        encrypted_data = store.pop(url_id)
+        encrypted_entry = store.pop(url_id, None)
 
-        try:
-            cipher = Fernet(url_secret.encode("ascii"))
-            decrypted = cipher.decrypt(encrypted_data)
-            payload = json.loads(decrypted.decode("utf-8"))
+        if encrypted_entry is None:
+            st.error("❌ Dữ liệu vừa bị lấy đi hoặc đã hết hạn.")
+        else:
+            try:
+                cipher = Fernet(url_secret.encode("ascii"))
+                decrypted = cipher.decrypt(encrypted_entry["data"])
+                payload = json.loads(decrypted.decode("utf-8"))
 
-            st.success("✅ Đã giải mã thành công! Dữ liệu vừa bị xóa vĩnh viễn khỏi máy chủ.")
+                st.success("✅ Đã giải mã thành công! Dữ liệu vừa bị xóa vĩnh viễn khỏi máy chủ.")
+                st.write("---")
 
-            st.write("---")
+                msg_text = payload.get("text", "")
+                if msg_text:
+                    safe_text = html.escape(msg_text)
+                    st.markdown(f'<div class="message-box">{safe_text}</div>', unsafe_allow_html=True)
 
-            # Hiển thị Tin nhắn (Đã căn giữa)
-            msg_text = payload.get("text", "")
-            if msg_text:
-                safe_text = html.escape(msg_text)
-                st.markdown(
-                    f"""
-                    <div class="message-box">
-                    {safe_text}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                filename = payload.get("filename", "")
+                filedata_b64 = payload.get("filedata", "")
+                mime_type = payload.get("mime_type", "application/octet-stream")
 
-            # Hiển thị Tệp đính kèm (Nút tải duy nhất)
-            filename = payload.get("filename", "")
-            filedata_b64 = payload.get("filedata", "")
-            mime_type = payload.get("mime_type", "application/octet-stream")
+                if filename and filedata_b64:
+                    try:
+                        raw_data = base64.b64decode(filedata_b64, validate=True)
+                        st.download_button(
+                            label=f"⬇️ Tải file: {filename}",
+                            data=raw_data,
+                            file_name=filename,
+                            mime=mime_type,
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    except Exception:
+                        st.error("❌ Không thể đọc tệp đính kèm.")
 
-            if filename and filedata_b64:
-                try:
-                    raw_data = base64.b64decode(filedata_b64, validate=True)
-                    st.download_button(
-                        label=f"⬇️ Download file: {filename}",
-                        data=raw_data,
-                        file_name=filename,
-                        mime=mime_type,
-                        type="primary",
-                        use_container_width=True,
-                    )
-                except Exception:
-                    st.error("❌ Không thể đọc tệp đính kèm.")
-
-        except InvalidToken:
-            st.error("❌ Khóa giải mã không hợp lệ hoặc dữ liệu bị hỏng.")
-        except Exception:
-            st.error("❌ Đã có lỗi xảy ra khi xử lý dữ liệu.")
+            except InvalidToken:
+                st.error("❌ Khóa giải mã không hợp lệ hoặc dữ liệu bị hỏng.")
+            except Exception:
+                st.error("❌ Đã có lỗi xảy ra khi xử lý dữ liệu.")
 
     st.write("---")
-    if st.button("Trở về trang chủ", kind="secondary", use_container_width=True):
+    if st.button("🏠 Trở về trang chủ", type="secondary", use_container_width=True):
+        st.session_state.confirmed_reveal = False
         st.query_params.clear()
         st.rerun()
 
@@ -254,22 +326,33 @@ if url_id and url_secret:
 # ============================================================
 
 else:
-    # Nếu CHƯA tạo link
     if not st.session_state.generated_link:
-        st.title("Simple, private file sharing")
-        
+        st.title("🌌 Simple, private file sharing")
+
         st.markdown(
             """
-            <p style='color: #9ca3af; font-size: 16px; margin-bottom: 30px;'>
-            Chia sẻ file và tin nhắn với <b>mã hóa đầu cuối</b>. Link sẽ tự động hủy ngay sau khi được mở. 
-            Đảm bảo quyền riêng tư tuyệt đối cho dữ liệu của bạn.
+            <p class="subtitle">
+            Chia sẻ file và tin nhắn với <b>mã hóa đầu cuối</b>. Link sẽ tự động hủy ngay sau khi được mở
+            và tự hết hạn sau 24 giờ nếu không ai mở.
             </p>
-            """, 
+            """,
             unsafe_allow_html=True
         )
 
+        st.markdown(
+            f"""
+            <div class="badge-row">
+                <span class="badge">🔐 Mã hóa Fernet (AES-128)</span>
+                <span class="badge">🔥 Xem 1 lần rồi tự hủy</span>
+                <span class="badge">⏱️ Hết hạn sau 24h</span>
+                <span class="badge">📦 Tối đa {format_size(MAX_FILE_SIZE_BYTES)}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         uploaded_file = st.file_uploader(
-            "Kéo thả hoặc chọn file để gửi (Tối đa 15MB)", 
+            f"Kéo thả hoặc chọn file để gửi (tối đa {format_size(MAX_FILE_SIZE_BYTES)})",
             label_visibility="collapsed"
         )
 
@@ -279,12 +362,21 @@ else:
             placeholder="Ghi chú bí mật của bạn...",
         )
 
-        st.write("") # Spacer
+        st.write("")
         if st.button("Tạo link chia sẻ", type="primary", use_container_width=True):
+            cleanup_expired_entries()
+
             if not text_input.strip() and uploaded_file is None:
                 st.warning("Vui lòng đính kèm file hoặc nhập tin nhắn.")
+            elif uploaded_file is not None and (uploaded_file.size or 0) > MAX_FILE_SIZE_BYTES:
+                st.error(
+                    f"❌ File quá lớn ({format_size(uploaded_file.size)}). "
+                    f"Giới hạn tối đa là {format_size(MAX_FILE_SIZE_BYTES)}."
+                )
             else:
                 try:
+                    enforce_store_capacity()
+
                     message_id = str(uuid.uuid4())
                     secret_key = Fernet.generate_key()
 
@@ -312,8 +404,10 @@ else:
                     cipher = Fernet(secret_key)
                     encrypted_payload = cipher.encrypt(plaintext)
 
-                    # Lưu vào RAM
-                    store[message_id] = encrypted_payload
+                    store[message_id] = {
+                        "data": encrypted_payload,
+                        "created": time.time(),
+                    }
 
                     params = {
                         "id": message_id,
@@ -330,37 +424,40 @@ else:
                     st.session_state.generated_message_id = message_id
                     st.rerun()
 
-                except Exception as exc:
+                except Exception:
                     st.error("❌ Không thể tạo link.")
 
-    # Nếu ĐÃ tạo link (Giao diện Success giống Wormhole)
     else:
-        st.title("Your file is ready to share!")
-        
+        st.title("✅ Your file is ready to share!")
+
         st.markdown(
             """
-            <p style='color: #9ca3af; font-size: 16px; margin-bottom: 20px;'>
-            Copy the link to share your file. Dữ liệu sẽ <b>tự động hủy</b> ngay sau lần tải đầu tiên.
+            <p class="subtitle">
+            Copy link để chia sẻ. Dữ liệu sẽ <b>tự động hủy</b> ngay sau lần tải đầu tiên,
+            hoặc tự hết hạn sau 24 giờ nếu không có ai mở.
             </p>
-            """, 
+            """,
             unsafe_allow_html=True
         )
 
-        # Hiển thị ô Copy link đặc trưng của Streamlit
         st.code(st.session_state.generated_link, language="text")
 
+        st.info(
+            "⚠️ Lưu ý: đường link chứa khóa giải mã. Chỉ gửi link qua kênh riêng tư "
+            "(tin nhắn trực tiếp), tránh dán vào nơi công khai hoặc kênh có bot tự động quét link."
+        )
+
         st.write("---")
-        
+
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Tạo mật thư mới", type="primary", use_container_width=True):
+            if st.button("✏️ Tạo mật thư mới", type="primary", use_container_width=True):
                 st.session_state.generated_link = ""
                 st.session_state.generated_message_id = ""
                 st.rerun()
         with col2:
-            if st.button("Hủy Link Ngay Lập Tức", kind="secondary", use_container_width=True):
-                if st.session_state.generated_message_id in store:
-                    del store[st.session_state.generated_message_id]
+            if st.button("🗑️ Hủy Link Ngay Lập Tức", type="secondary", use_container_width=True):
+                store.pop(st.session_state.generated_message_id, None)
                 st.session_state.generated_link = ""
                 st.session_state.generated_message_id = ""
                 st.rerun()
