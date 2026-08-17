@@ -93,10 +93,10 @@ url_key = query_params.get("key")
 # LUỒNG 1: GIAO DIỆN NGƯỜI NHẬN (ĐÃ NÂNG CẤP CHỮ TO & NÚT TẢI LỚN)
 # ============================================================
 if url_id and url_key:
-    st.title("🔓 Mật Thư Của Bạn")
+    st.title("🔓 TIN NHẮN CỦA BẠN")
     
     if url_id not in store:
-        st.error("❌ Mật thư này không tồn tại, hoặc ĐÃ BỊ ĐỌC VÀ TIÊU HỦY TRƯỚC ĐÓ!")
+        st.error("❌ Tin nhắn đã bị tiêu hủy, vui lòng mở mục download để xem file !!!")
     else:
         encrypted_data = store.pop(url_id)
         
@@ -151,12 +151,12 @@ else:
     st.markdown("Chia sẻ File & Tin nhắn dùng **1 lần duy nhất**. Tự động xóa vĩnh viễn ngay khi người nhận truy cập.")
     
     st.write("---")
-    st.markdown("### 📦 Đóng gói dữ liệu")
+    st.markdown("### 📦 Gửi dữ liệu")
     
-    text_input = st.text_area("Nhập nội dung bí mật (Không bắt buộc):", height=150)
-    uploaded_file = st.file_uploader("Đính kèm File (Không bắt buộc, khuyên dùng < 50MB):")
+    text_input = st.text_area("Nhập nội dung tin nhắn):", height=150)
+    uploaded_file = st.file_uploader("Đính kèm File:")
 
-    if st.button("🚀 Tạo Link Mật Thư", type="primary", use_container_width=True):
+    if st.button("🚀 Tạo Link gửi", type="primary", use_container_width=True):
         if not text_input.strip() and not uploaded_file:
             st.warning("Vui lòng nhập ít nhất một tin nhắn hoặc chọn một file!")
         else:
@@ -184,8 +184,8 @@ else:
             params = {"id": msg_id, "key": key.decode('utf-8')}
             full_link = f"{clean_base_url}/?{urllib.parse.urlencode(params)}"
             
-            st.success("✅ Đã đóng gói và mã hóa thành công!")
-            st.info("💡 COPY đường link dưới đây và gửi cho đối tác.")
+            st.success("✅ Mã hóa thành công!")
+            st.info("💡 COPY đường link và gửi đi.")
             
             st.code(full_link, language="text")
-            st.caption("Ngay khi có người bấm vào link này, khối dữ liệu sẽ bị rút cạn và xóa sạch vĩnh viễn.")
+            st.caption("Khi có người bấm vào link này, tin nhắn sẽ xóa vĩnh viễn.")
