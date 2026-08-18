@@ -31,70 +31,74 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN (ĐÃ FIX CHỮ UPLOAD CỰC ĐẬM & XÓA NỀN TRẮNG)
+# CSS GIAO DIỆN (ĐÃ ÉP PHÔNG ARIAL TOÀN BỘ)
 # ============================================================
 
 st.markdown(
     """
     <style>
-    /* 1. Nền tối toàn trang */
+    /* Nền tối toàn trang */
     .stApp {
         background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
 
-    /* 2. Đổi font chữ cơ bản */
-    html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button {
+    /* Đổi font chữ Arial cho TOÀN BỘ văn bản kể cả khung người nhận */
+    html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button, .message-box, .subtitle, .stAlert {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    /* Giữ nguyên Icon hệ thống */
+    /* Giữ nguyên Icon hệ thống không bị lỗi font */
     [data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
         color: #dcb8ff !important;
     }
 
-    /* 3. FIX KHUNG UPLOAD TRẮNG VÀ LÀM NÚT UPLOAD CỰC ĐẬM */
-    [data-testid="stFileUploader"] > div > div,
-    [data-testid="stFileUploadDropzone"] {
-        background-color: #1f2937 !important; /* Ép nền đen */
-        border: 2px dashed #6b7280 !important;
+    /* SỬA TRIỆT ĐỂ KHUNG UPLOAD */
+    [data-testid="stFileUploader"] {
+        background-color: #1f2937 !important;
         border-radius: 16px !important;
+        padding: 4px !important;
+    }
+    [data-testid="stFileUploadDropzone"] {
+        background-color: transparent !important;
+        border: 2px dashed #6b7280 !important;
+        border-radius: 14px !important;
+        padding: 30px 20px !important;
     }
     [data-testid="stFileUploadDropzone"]:hover {
         border-color: #ff2e93 !important;
-        background-color: rgba(255, 46, 147, 0.1) !important;
+        background-color: rgba(255, 46, 147, 0.05) !important;
     }
-    
-    /* Ẩn hoàn toàn chữ 200MB mặc định */
-    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploadDropzone"] [data-testid="stIconMaterial"],
+    [data-testid="stFileUploadDropzone"] svg {
+        display: none !important; 
+    }
     [data-testid="stFileUploadDropzoneInstructions"] small {
         display: none !important; 
     }
-    
-    /* Chữ hướng dẫn kéo thả */
     [data-testid="stFileUploadDropzoneInstructions"] div,
     [data-testid="stFileUploadDropzoneInstructions"] span {
         color: #f8fafc !important; 
+        font-size: 15px !important;
     }
-    
-    /* NÚT UPLOAD BÊN TRONG KHUNG - NỔI BẬT & ĐẬM */
     [data-testid="stFileUploadDropzone"] button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
-        font-weight: 900 !important; /* ĐẬM TỐI ĐA */
+        font-weight: 900 !important; 
         font-size: 16px !important;
         border: none !important;
         border-radius: 8px !important;
-        padding: 8px 20px !important;
+        padding: 10px 24px !important;
         box-shadow: 0 4px 10px rgba(220, 184, 255, 0.2) !important;
+        margin-top: 10px !important;
     }
     [data-testid="stFileUploadDropzone"] button:hover {
         filter: brightness(1.1);
-        transform: translateY(-1px);
+        transform: translateY(-2px);
     }
 
-    /* 4. CHỈNH TIÊU ĐỀ & BADGE */
+    /* TIÊU ĐỀ & CÁC THÀNH PHẦN KHÁC */
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
@@ -108,7 +112,6 @@ st.markdown(
         font-size: 16px;
         margin-bottom: 26px;
         line-height: 1.55;
-        -webkit-text-fill-color: #9ca3af !important;
     }
 
     .badge-row {
@@ -130,7 +133,7 @@ st.markdown(
         font-weight: 600;
     }
 
-    /* 5. Ô NHẬP TIN NHẮN */
+    /* Ô NHẬP TIN NHẮN */
     .stTextArea textarea {
         background-color: #1f2937 !important;
         border: 1px solid #4b5563 !important;
@@ -147,8 +150,8 @@ st.markdown(
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
-    /* 6. NÚT BẤM TẠO LINK */
-    div.stButton > button {
+    /* NÚT BẤM CHÍNH (TẠO LINK) */
+    div.stButton > button[kind="primary"] {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
         border-radius: 10px !important;
@@ -158,10 +161,11 @@ st.markdown(
         border: none !important;
         transition: all 0.2s ease !important;
     }
-    div.stButton > button:hover {
+    div.stButton > button[kind="primary"]:hover {
         filter: brightness(1.08);
         transform: translateY(-2px);
     }
+    
     div.stButton > button[kind="secondary"] {
         background: transparent !important;
         color: #9ca3af !important;
@@ -180,7 +184,6 @@ st.markdown(
 
     .stAlert {
         background-color: rgba(31, 41, 55, 0.85) !important;
-        color: #e2e8f0 !important;
         border: 1px solid #374151 !important;
         border-radius: 12px !important;
     }
@@ -198,15 +201,6 @@ st.markdown(
         margin-bottom: 20px;
         text-align: center !important;
         box-shadow: 0 8px 30px rgba(255, 46, 147, 0.08);
-    }
-
-    .reveal-card {
-        background: rgba(31, 41, 55, 0.6);
-        border: 1px solid #374151;
-        border-radius: 16px;
-        padding: 32px 24px;
-        text-align: center;
-        margin-bottom: 20px;
     }
     </style>
     """,
@@ -261,8 +255,6 @@ if "generated_link" not in st.session_state:
     st.session_state.generated_link = ""
 if "generated_message_id" not in st.session_state:
     st.session_state.generated_message_id = ""
-if "confirmed_reveal" not in st.session_state:
-    st.session_state.confirmed_reveal = False
 
 
 # ============================================================
@@ -275,7 +267,7 @@ url_secret = query_params.get("secret", "")
 
 
 # ============================================================
-# LUỒNG NGƯỜI NHẬN
+# LUỒNG NGƯỜI NHẬN (ĐÃ BỎ BƯỚC XÁC NHẬN)
 # ============================================================
 
 if url_id and url_secret:
@@ -286,33 +278,16 @@ if url_id and url_secret:
         """
         <p class="subtitle">
         Hệ thống chia sẻ dữ liệu với <b>mã hóa đầu cuối (end-to-end encryption)</b>
-        và đường link sẽ <b>tự động hủy ngay sau khi được mở</b>.
+        và đường link sẽ <b>tự động hủy ngay sau khi bạn mở</b>.
         </p>
         """,
         unsafe_allow_html=True
     )
 
     if url_id not in store:
-        st.error("❌ Dữ liệu không tồn tại, đã hết hạn (sau 24h) hoặc ĐÃ ĐƯỢC XEM trước đó.")
-
-    elif not st.session_state.confirmed_reveal:
-        st.markdown(
-            """
-            <div class="reveal-card">
-                <div style="font-size:40px; margin-bottom:10px;">🔒</div>
-                <div style="font-size:16px; color:#9ca3af;">
-                    Nội dung đang được mã hóa an toàn.<br>
-                    Nhấn nút bên dưới để giải mã và xem — dữ liệu sẽ bị xóa vĩnh viễn ngay sau đó.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if st.button("🔓 Giải mã & Xem nội dung", type="primary", use_container_width=True):
-            st.session_state.confirmed_reveal = True
-            st.rerun()
-
+        st.error("❌ Dữ liệu không tồn tại, đã hết hạn (sau 24h) hoặc ĐÃ ĐƯỢC XEM TRƯỚC ĐÓ.")
     else:
+        # BỐC HƠI DỮ LIỆU NGAY LẬP TỨC KHI VỪA VÀO TRANG
         encrypted_entry = store.pop(url_id, None)
 
         if not isinstance(encrypted_entry, dict) or "data" not in encrypted_entry:
@@ -356,7 +331,6 @@ if url_id and url_secret:
 
     st.write("---")
     if st.button("🏠 Trở về trang chủ", type="secondary", use_container_width=True):
-        st.session_state.confirmed_reveal = False
         st.query_params.clear()
         st.rerun()
 
