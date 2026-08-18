@@ -14,9 +14,11 @@ from cryptography.fernet import Fernet, InvalidToken
 APP_TITLE = "Chia Sẻ Bảo Mật"
 BASE_URL = "https://phongchat.streamlit.app"
 
-MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024      # 15 MB — giới hạn thật, có kiểm tra
-LINK_TTL_SECONDS = 24 * 60 * 60             # Link tự hết hạn sau 24h nếu không ai mở
-MAX_STORE_ENTRIES = 200                     # Chặn spam làm đầy RAM server
+# Đã nâng dung lượng lên 50MB cho thoải mái
+MAX_FILE_SIZE_MB = 50       
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
+LINK_TTL_SECONDS = 24 * 60 * 60             
+MAX_STORE_ENTRIES = 200                     
 
 # ============================================================
 # CẤU HÌNH STREAMLIT
@@ -30,7 +32,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN
+# CSS GIAO DIỆN (ĐÃ FIX LỖI MÀU NỀN, MÀU CHỮ VÀ KHUNG UPLOAD)
 # ============================================================
 
 st.markdown(
@@ -45,31 +47,8 @@ st.markdown(
         color: #e2e8f0 !important;
     }
 
-    /* Không được ép font lên icon (Material Symbols) của Streamlit,
-       nếu không icon "upload" sẽ vỡ ra thành chữ thường chồng chữ */
     [data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Outlined' !important;
-        color: #dcb8ff !important;
-    }
-
-    /* Chữ "Drag and drop file here / Limit ... per file" trong khung upload */
-    [data-testid="stFileUploadDropzoneInstructions"] div,
-    [data-testid="stFileUploadDropzoneInstructions"] span {
-        color: #cbd5e1 !important;
-    }
-    [data-testid="stFileUploadDropzoneInstructions"] small {
-        color: #9ca3af !important;
-    }
-
-    /* Nút "Browse files" bên trong khung upload */
-    [data-testid="stFileUploadDropzone"] button {
-        background-color: #374151 !important;
-        color: #e2e8f0 !important;
-        border: 1px solid #4b5563 !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stFileUploadDropzone"] button:hover {
-        border-color: #dcb8ff !important;
         color: #dcb8ff !important;
     }
 
@@ -107,9 +86,10 @@ st.markdown(
         font-weight: 600;
     }
 
+    /* FIX KHUNG UPLOAD: Ép nền tối, viền đứt, ẩn chữ 200MB mặc định */
     [data-testid="stFileUploadDropzone"] {
-        background-color: rgba(255,255,255,0.02) !important;
-        border: 2px dashed #4b5563 !important;
+        background-color: rgba(31, 41, 55, 0.5) !important;
+        border: 2px dashed #6b7280 !important;
         border-radius: 16px !important;
         padding: 40px 20px !important;
         transition: all 0.3s ease !important;
@@ -118,19 +98,42 @@ st.markdown(
         border-color: #ff2e93 !important;
         background-color: rgba(255, 46, 147, 0.05) !important;
     }
+    [data-testid="stFileUploadDropzoneInstructions"] small {
+        display: none !important; /* Ẩn dòng chữ 200MB per file gây lú */
+    }
+    [data-testid="stFileUploadDropzoneInstructions"] div, 
+    [data-testid="stFileUploadDropzoneInstructions"] span {
+        color: #f8fafc !important; /* Ép chữ hướng dẫn thành màu sáng */
+    }
+    [data-testid="stFileUploadDropzone"] button {
+        background-color: #374151 !important;
+        color: #e2e8f0 !important;
+        border: 1px solid #4b5563 !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover {
+        border-color: #dcb8ff !important;
+        color: #dcb8ff !important;
+    }
 
+    /* FIX Ô NHẬP CHỮ: Ép chữ mẫu (placeholder) và chữ gõ vào sáng lên */
     .stTextArea textarea {
         background-color: #1f2937 !important;
-        border: 1px solid #374151 !important;
-        color: white !important;
+        border: 1px solid #4b5563 !important;
+        color: #ffffff !important; 
         border-radius: 12px !important;
         font-size: 16px !important;
+    }
+    .stTextArea textarea::placeholder {
+        color: #9ca3af !important; 
+        opacity: 1 !important;
     }
     .stTextArea textarea:focus {
         border-color: #dcb8ff !important;
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
+    /* CSS Các Nút bấm */
     div.stButton > button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
@@ -145,7 +148,6 @@ st.markdown(
         filter: brightness(1.08);
         transform: translateY(-2px);
     }
-
     div.stButton > button[kind="secondary"] {
         background: transparent !important;
         color: #9ca3af !important;
@@ -200,7 +202,6 @@ st.markdown(
 
 # ============================================================
 # BỘ NHỚ RAM TẠM THỜI (STORE)
-# Mỗi entry: message_id -> {"data": bytes_mahoa, "created": timestamp}
 # ============================================================
 
 @st.cache_resource
@@ -211,11 +212,6 @@ store = get_memory_store()
 
 
 def cleanup_expired_entries():
-    """Dọn các link đã quá hạn (không ai mở) để tránh rò rỉ bộ nhớ.
-
-    Cũng dọn luôn các entry ở định dạng cũ (từ trước khi TTL được thêm vào),
-    vì st.cache_resource giữ nguyên dữ liệu qua các lần deploy code mới.
-    """
     now = time.time()
     expired_ids = []
     for mid, entry in store.items():
@@ -229,11 +225,9 @@ def cleanup_expired_entries():
 
 
 def enforce_store_capacity():
-    """Chặn spam tạo link vô hạn: nếu đầy, xoá entry cũ nhất trước."""
     if len(store) >= MAX_STORE_ENTRIES:
         oldest_id = min(store, key=lambda mid: store[mid]["created"])
         store.pop(oldest_id, None)
-
 
 cleanup_expired_entries()
 
@@ -284,9 +278,6 @@ if url_id and url_secret:
         unsafe_allow_html=True
     )
 
-    # Bước xác nhận thủ công trước khi giải mã / tiêu huỷ dữ liệu.
-    # Mục đích: chặn các bot quét link (preview link của Zalo/Messenger/Slack...)
-    # vô tình mở trang và "đốt" mất nội dung trước khi người nhận thật sự bấm vào.
     if url_id not in store:
         st.error("❌ Dữ liệu không tồn tại, đã hết hạn (sau 24h) hoặc ĐÃ ĐƯỢC XEM trước đó.")
 
