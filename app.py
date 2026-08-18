@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet, InvalidToken
 APP_TITLE = "Chia Sẻ Bảo Mật"
 BASE_URL = "https://phongchat.streamlit.app"
 
-# Đã nâng dung lượng lên 50MB cho thoải mái
+# ĐÃ FIX: Nâng thẳng lên 50MB 
 MAX_FILE_SIZE_MB = 50       
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
 LINK_TTL_SECONDS = 24 * 60 * 60             
@@ -32,26 +32,52 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN (ĐÃ FIX LỖI MÀU NỀN, MÀU CHỮ VÀ KHUNG UPLOAD)
+# CSS GIAO DIỆN (ĐÃ FIX TẬN GỐC LỖI HIỂN THỊ)
 # ============================================================
 
 st.markdown(
     """
     <style>
+    /* 1. Nền tối toàn trang */
     .stApp {
         background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
 
-    html, body, p, div, span, label, li {
+    /* 2. Đổi font chữ - KHÔNG ép vào thẻ span/div để giữ nguyên Icon hệ thống */
+    html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    [data-testid="stIconMaterial"] {
-        font-family: 'Material Symbols Outlined' !important;
-        color: #dcb8ff !important;
+    /* 3. FIX TRIỆT ĐỂ KHUNG UPLOAD TRẮNG VÀ LỖI CHỮ UPLOADPLOAD */
+    [data-testid="stFileUploader"] > div > div,
+    [data-testid="stFileUploadDropzone"] {
+        background-color: #1f2937 !important; /* Ép nền xám đen */
+        border: 2px dashed #6b7280 !important;
+        border-radius: 16px !important;
+    }
+    [data-testid="stFileUploadDropzone"]:hover {
+        border-color: #ff2e93 !important;
+        background-color: rgba(255, 46, 147, 0.1) !important;
+    }
+    /* Ẩn chữ giới hạn 200MB của Streamlit */
+    [data-testid="stFileUploadDropzoneInstructions"] small {
+        display: none !important; 
+    }
+    /* Cứu lại màu chữ hướng dẫn kéo thả file */
+    [data-testid="stFileUploadDropzoneInstructions"] div,
+    [data-testid="stFileUploadDropzoneInstructions"] span {
+        color: #f8fafc !important; 
+    }
+    /* Nút Browse files bên trong */
+    [data-testid="stFileUploadDropzone"] button {
+        background-color: #374151 !important;
+        color: #e2e8f0 !important;
+        border: 1px solid #4b5563 !important;
+        border-radius: 8px !important;
     }
 
+    /* 4. CHỈNH TIÊU ĐỀ & CHỮ KÈM THEO */
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
@@ -61,10 +87,11 @@ st.markdown(
     }
 
     .subtitle {
-        color: #9ca3af;
+        color: #9ca3af !important;
         font-size: 16px;
         margin-bottom: 26px;
         line-height: 1.55;
+        -webkit-text-fill-color: #9ca3af !important;
     }
 
     .badge-row {
@@ -86,37 +113,7 @@ st.markdown(
         font-weight: 600;
     }
 
-    /* FIX KHUNG UPLOAD: Ép nền tối, viền đứt, ẩn chữ 200MB mặc định */
-    [data-testid="stFileUploadDropzone"] {
-        background-color: rgba(31, 41, 55, 0.5) !important;
-        border: 2px dashed #6b7280 !important;
-        border-radius: 16px !important;
-        padding: 40px 20px !important;
-        transition: all 0.3s ease !important;
-    }
-    [data-testid="stFileUploadDropzone"]:hover {
-        border-color: #ff2e93 !important;
-        background-color: rgba(255, 46, 147, 0.05) !important;
-    }
-    [data-testid="stFileUploadDropzoneInstructions"] small {
-        display: none !important; /* Ẩn dòng chữ 200MB per file gây lú */
-    }
-    [data-testid="stFileUploadDropzoneInstructions"] div, 
-    [data-testid="stFileUploadDropzoneInstructions"] span {
-        color: #f8fafc !important; /* Ép chữ hướng dẫn thành màu sáng */
-    }
-    [data-testid="stFileUploadDropzone"] button {
-        background-color: #374151 !important;
-        color: #e2e8f0 !important;
-        border: 1px solid #4b5563 !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stFileUploadDropzone"] button:hover {
-        border-color: #dcb8ff !important;
-        color: #dcb8ff !important;
-    }
-
-    /* FIX Ô NHẬP CHỮ: Ép chữ mẫu (placeholder) và chữ gõ vào sáng lên */
+    /* 5. FIX Ô NHẬP TIN NHẮN (THẤY RÕ CHỮ MÀU TRẮNG) */
     .stTextArea textarea {
         background-color: #1f2937 !important;
         border: 1px solid #4b5563 !important;
@@ -133,7 +130,7 @@ st.markdown(
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
-    /* CSS Các Nút bấm */
+    /* 6. NÚT BẤM CHÍNH */
     div.stButton > button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
