@@ -14,7 +14,6 @@ from cryptography.fernet import Fernet, InvalidToken
 APP_TITLE = "Chia Sẻ Bảo Mật"
 BASE_URL = "https://phongchat.streamlit.app"
 
-# ĐÃ FIX: Nâng thẳng lên 50MB 
 MAX_FILE_SIZE_MB = 50       
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
 LINK_TTL_SECONDS = 24 * 60 * 60             
@@ -32,7 +31,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN (ĐÃ FIX TẬN GỐC LỖI HIỂN THỊ)
+# CSS GIAO DIỆN (ĐÃ FIX CHỮ UPLOAD CỰC ĐẬM & XÓA NỀN TRẮNG)
 # ============================================================
 
 st.markdown(
@@ -43,16 +42,22 @@ st.markdown(
         background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
 
-    /* 2. Đổi font chữ - KHÔNG ép vào thẻ span/div để giữ nguyên Icon hệ thống */
+    /* 2. Đổi font chữ cơ bản */
     html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    /* 3. FIX TRIỆT ĐỂ KHUNG UPLOAD TRẮNG VÀ LỖI CHỮ UPLOADPLOAD */
+    /* Giữ nguyên Icon hệ thống */
+    [data-testid="stIconMaterial"] {
+        font-family: 'Material Symbols Outlined' !important;
+        color: #dcb8ff !important;
+    }
+
+    /* 3. FIX KHUNG UPLOAD TRẮNG VÀ LÀM NÚT UPLOAD CỰC ĐẬM */
     [data-testid="stFileUploader"] > div > div,
     [data-testid="stFileUploadDropzone"] {
-        background-color: #1f2937 !important; /* Ép nền xám đen */
+        background-color: #1f2937 !important; /* Ép nền đen */
         border: 2px dashed #6b7280 !important;
         border-radius: 16px !important;
     }
@@ -60,24 +65,36 @@ st.markdown(
         border-color: #ff2e93 !important;
         background-color: rgba(255, 46, 147, 0.1) !important;
     }
-    /* Ẩn chữ giới hạn 200MB của Streamlit */
+    
+    /* Ẩn hoàn toàn chữ 200MB mặc định */
+    [data-testid="stFileUploader"] small,
     [data-testid="stFileUploadDropzoneInstructions"] small {
         display: none !important; 
     }
-    /* Cứu lại màu chữ hướng dẫn kéo thả file */
+    
+    /* Chữ hướng dẫn kéo thả */
     [data-testid="stFileUploadDropzoneInstructions"] div,
     [data-testid="stFileUploadDropzoneInstructions"] span {
         color: #f8fafc !important; 
     }
-    /* Nút Browse files bên trong */
+    
+    /* NÚT UPLOAD BÊN TRONG KHUNG - NỔI BẬT & ĐẬM */
     [data-testid="stFileUploadDropzone"] button {
-        background-color: #374151 !important;
-        color: #e2e8f0 !important;
-        border: 1px solid #4b5563 !important;
+        background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
+        color: #111319 !important;
+        font-weight: 900 !important; /* ĐẬM TỐI ĐA */
+        font-size: 16px !important;
+        border: none !important;
         border-radius: 8px !important;
+        padding: 8px 20px !important;
+        box-shadow: 0 4px 10px rgba(220, 184, 255, 0.2) !important;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover {
+        filter: brightness(1.1);
+        transform: translateY(-1px);
     }
 
-    /* 4. CHỈNH TIÊU ĐỀ & CHỮ KÈM THEO */
+    /* 4. CHỈNH TIÊU ĐỀ & BADGE */
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
@@ -113,7 +130,7 @@ st.markdown(
         font-weight: 600;
     }
 
-    /* 5. FIX Ô NHẬP TIN NHẮN (THẤY RÕ CHỮ MÀU TRẮNG) */
+    /* 5. Ô NHẬP TIN NHẮN */
     .stTextArea textarea {
         background-color: #1f2937 !important;
         border: 1px solid #4b5563 !important;
@@ -130,12 +147,12 @@ st.markdown(
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
-    /* 6. NÚT BẤM CHÍNH */
+    /* 6. NÚT BẤM TẠO LINK */
     div.stButton > button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
         border-radius: 10px !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
         font-size: 16px !important;
         padding: 12px 24px !important;
         border: none !important;
