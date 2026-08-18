@@ -291,8 +291,7 @@ if url_id and url_secret:
     st.markdown(
         """
         <p class="subtitle">
-        Hệ thống chia sẻ dữ liệu với <b>mã hóa đầu cuối (end-to-end encryption)</b>
-        và đường link sẽ <b>tự động hủy ngay sau khi bạn mở</b>.
+        Đường link sẽ <b>tự động hủy ngay sau khi mở</b>.
         </p>
         """,
         unsafe_allow_html=True
