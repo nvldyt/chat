@@ -11,13 +11,13 @@ from cryptography.fernet import Fernet, InvalidToken
 # CẤU HÌNH ỨNG DỤNG
 # ============================================================
 
-APP_TITLE = "Chia Sẻ Bảo Mật"
+APP_TITLE = "CHAT"
 BASE_URL = "https://phongchat.streamlit.app"
 
 MAX_FILE_SIZE_MB = 50       
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
 LINK_TTL_SECONDS = 24 * 60 * 60             
-MAX_STORE_ENTRIES = 200                     
+MAX_STORE_ENTRIES = 50                     
 
 # ============================================================
 # CẤU HÌNH STREAMLIT
@@ -272,7 +272,7 @@ url_secret = query_params.get("secret", "")
 
 if url_id and url_secret:
 
-    st.title("📬 Bạn có một tin nhắn bảo mật!")
+    st.title("📬 Tin nhắn tự động xóa sau khi xem!")
 
     st.markdown(
         """
@@ -285,7 +285,7 @@ if url_id and url_secret:
     )
 
     if url_id not in store:
-        st.error("❌ Dữ liệu không tồn tại, đã hết hạn (sau 24h) hoặc ĐÃ ĐƯỢC XEM TRƯỚC ĐÓ.")
+        st.error("❌ Dữ liệu đã bị xóa, vui lòng mở download để xem file!")
     else:
         # BỐC HƠI DỮ LIỆU NGAY LẬP TỨC KHI VỪA VÀO TRANG
         encrypted_entry = store.pop(url_id, None)
@@ -298,7 +298,7 @@ if url_id and url_secret:
                 decrypted = cipher.decrypt(encrypted_entry["data"])
                 payload = json.loads(decrypted.decode("utf-8"))
 
-                st.success("✅ Đã giải mã thành công! Dữ liệu vừa bị xóa vĩnh viễn khỏi máy chủ.")
+                st.success("✅ Đã giải mã thành công! Dữ liệu đã bị xóa khỏi máy chủ.")
                 st.write("---")
 
                 msg_text = payload.get("text", "")
@@ -341,13 +341,12 @@ if url_id and url_secret:
 
 else:
     if not st.session_state.generated_link:
-        st.title("🌌 Simple, private file sharing")
+        st.title("🌌 TIN NHẮN TỰ ĐỘNG XÓA")
 
         st.markdown(
             """
             <p class="subtitle">
-            Chia sẻ file và tin nhắn với <b>mã hóa đầu cuối</b>. Link sẽ tự động hủy ngay sau khi được mở
-            và tự hết hạn sau 24 giờ nếu không ai mở.
+            Link sẽ tự động hủy ngay sau khi được mở và tự hết hạn sau 24 giờ nếu không ai mở.
             </p>
             """,
             unsafe_allow_html=True
@@ -442,7 +441,7 @@ else:
                     st.error("❌ Không thể tạo link.")
 
     else:
-        st.title("✅ Your file is ready to share!")
+        st.title("✅ Đã tạo đường link chia sẻ thành công!")
 
         st.markdown(
             """
