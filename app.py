@@ -455,7 +455,7 @@ else:
                     st.error("❌ Không thể tạo link.")
 
     else:
-        st.title("✅ Đã tạo đường link chia sẻ thành công!")
+        st.title("✅ Thành công!")
 
         st.markdown(
             """
@@ -468,11 +468,6 @@ else:
         )
 
         st.code(st.session_state.generated_link, language="text")
-
-        st.info(
-            "⚠️ Lưu ý: đường link chứa khóa giải mã. Chỉ gửi link qua kênh riêng tư "
-            "(tin nhắn trực tiếp), tránh dán vào nơi công khai hoặc kênh có bot tự động quét link."
-        )
 
         st.write("---")
 
