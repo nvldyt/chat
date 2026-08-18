@@ -31,7 +31,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN (ĐÃ ÉP PHÔNG ARIAL TOÀN BỘ)
+# CSS GIAO DIỆN (ĐÃ FIX TUYỆT ĐỐI NÚT UPLOAD & FONT ARIAL)
 # ============================================================
 
 st.markdown(
@@ -42,19 +42,16 @@ st.markdown(
         background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
 
-    /* Đổi font chữ Arial cho TOÀN BỘ văn bản kể cả khung người nhận */
+    /* Đổi font chữ Arial cho TOÀN BỘ văn bản */
     html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button, .message-box, .subtitle, .stAlert {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    /* Giữ nguyên Icon hệ thống không bị lỗi font */
-    [data-testid="stIconMaterial"] {
-        font-family: 'Material Symbols Outlined' !important;
-        color: #dcb8ff !important;
-    }
-
-    /* SỬA TRIỆT ĐỂ KHUNG UPLOAD */
+    /* =========================================
+       SỬA TRIỆT ĐỂ KHUNG UPLOAD VÀ NÚT BẤM
+       ========================================= */
+       
     [data-testid="stFileUploader"] {
         background-color: #1f2937 !important;
         border-radius: 16px !important;
@@ -70,10 +67,39 @@ st.markdown(
         border-color: #ff2e93 !important;
         background-color: rgba(255, 46, 147, 0.05) !important;
     }
-    [data-testid="stFileUploadDropzone"] [data-testid="stIconMaterial"],
-    [data-testid="stFileUploadDropzone"] svg {
+    
+    /* 1. Xóa sạch sẽ chữ và icon mặc định của nút Upload (nguyên nhân gây đè chữ) */
+    [data-testid="stFileUploadDropzone"] button span,
+    [data-testid="stFileUploadDropzone"] button svg,
+    [data-testid="stFileUploadDropzone"] button i {
         display: none !important; 
     }
+    
+    /* 2. Vẽ lại chữ mới siêu đậm cho nút Upload */
+    [data-testid="stFileUploadDropzone"] button::after {
+        content: "CHỌN FILE" !important;
+        display: block !important;
+        font-family: 'Arial', sans-serif !important;
+        font-weight: 900 !important;
+        font-size: 16px !important;
+        color: #111319 !important;
+    }
+    
+    /* 3. Đổ màu dạ quang và chỉnh khung nút Upload */
+    [data-testid="stFileUploadDropzone"] button {
+        background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 10px 30px !important;
+        box-shadow: 0 4px 10px rgba(220, 184, 255, 0.2) !important;
+        margin-top: 10px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover {
+        filter: brightness(1.1);
+        transform: translateY(-2px);
+    }
+    
+    /* 4. Ẩn chữ giới hạn mặc định và chỉnh màu chữ kéo thả */
     [data-testid="stFileUploadDropzoneInstructions"] small {
         display: none !important; 
     }
@@ -82,23 +108,11 @@ st.markdown(
         color: #f8fafc !important; 
         font-size: 15px !important;
     }
-    [data-testid="stFileUploadDropzone"] button {
-        background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
-        color: #111319 !important;
-        font-weight: 900 !important; 
-        font-size: 16px !important;
-        border: none !important;
-        border-radius: 8px !important;
-        padding: 10px 24px !important;
-        box-shadow: 0 4px 10px rgba(220, 184, 255, 0.2) !important;
-        margin-top: 10px !important;
-    }
-    [data-testid="stFileUploadDropzone"] button:hover {
-        filter: brightness(1.1);
-        transform: translateY(-2px);
-    }
 
-    /* TIÊU ĐỀ & CÁC THÀNH PHẦN KHÁC */
+    /* =========================================
+       TIÊU ĐỀ & CÁC THÀNH PHẦN KHÁC
+       ========================================= */
+       
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
