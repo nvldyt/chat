@@ -12,7 +12,7 @@ from cryptography.fernet import Fernet, InvalidToken
 # ============================================================
 
 APP_TITLE = "CHAT"
-BASE_URL = "https://filebaomat.streamlit.app"
+BASE_URL = "https://filebaomat"
 
 MAX_FILE_SIZE_MB = 50       
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
