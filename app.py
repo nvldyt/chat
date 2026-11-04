@@ -1,10 +1,15 @@
-import streamlit as st
+import os
 import uuid
 import json
 import base64
+import binascii
 import html
 import time
+import threading
 import urllib.parse
+from typing import Dict, Any, Tuple
+
+import streamlit as st
 from cryptography.fernet import Fernet, InvalidToken
 
 # ============================================================
@@ -12,16 +17,12 @@ from cryptography.fernet import Fernet, InvalidToken
 # ============================================================
 
 APP_TITLE = "CHAT"
-BASE_URL = "https://filebaomat.streamlit.app/"
+DEFAULT_BASE_URL = "https://filebaomat.streamlit.app"
 
-MAX_FILE_SIZE_MB = 50       
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024      
-LINK_TTL_SECONDS = 24 * 60 * 60             
-MAX_STORE_ENTRIES = 50                     
-
-# ============================================================
-# CẤU HÌNH STREAMLIT
-# ============================================================
+MAX_FILE_SIZE_MB = 50
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+LINK_TTL_SECONDS = 24 * 60 * 60
+MAX_STORE_ENTRIES = 50
 
 st.set_page_config(
     page_title=APP_TITLE,
@@ -31,27 +32,21 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS GIAO DIỆN (ĐÃ FIX TUYỆT ĐỐI NÚT UPLOAD & FONT ARIAL)
+# CSS GIAO DIỆN
 # ============================================================
 
 st.markdown(
     """
     <style>
-    /* Nền tối toàn trang */
     .stApp {
         background: radial-gradient(circle at 20% 0%, #1b1030 0%, #111319 45%, #0b0c10 100%) !important;
     }
 
-    /* Đổi font chữ Arial cho TOÀN BỘ văn bản */
     html, body, p, label, li, h1, h2, h3, h4, h5, h6, textarea, input, button, .message-box, .subtitle, .stAlert {
         font-family: 'Arial', sans-serif !important;
         color: #e2e8f0 !important;
     }
 
-    /* =========================================
-       SỬA TRIỆT ĐỂ KHUNG UPLOAD VÀ NÚT BẤM
-       ========================================= */
-       
     [data-testid="stFileUploader"] {
         background-color: #1f2937 !important;
         border-radius: 16px !important;
@@ -67,15 +62,13 @@ st.markdown(
         border-color: #ff2e93 !important;
         background-color: rgba(255, 46, 147, 0.05) !important;
     }
-    
-    /* 1. Xóa sạch sẽ chữ và icon mặc định của nút Upload (nguyên nhân gây đè chữ) */
+
     [data-testid="stFileUploadDropzone"] button span,
     [data-testid="stFileUploadDropzone"] button svg,
     [data-testid="stFileUploadDropzone"] button i {
-        display: none !important; 
+        display: none !important;
     }
-    
-    /* 2. Vẽ lại chữ mới siêu đậm cho nút Upload */
+
     [data-testid="stFileUploadDropzone"] button::after {
         content: "CHỌN FILE" !important;
         display: block !important;
@@ -84,8 +77,7 @@ st.markdown(
         font-size: 16px !important;
         color: #111319 !important;
     }
-    
-    /* 3. Đổ màu dạ quang và chỉnh khung nút Upload */
+
     [data-testid="stFileUploadDropzone"] button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         border: none !important;
@@ -98,21 +90,16 @@ st.markdown(
         filter: brightness(1.1);
         transform: translateY(-2px);
     }
-    
-    /* 4. Ẩn chữ giới hạn mặc định và chỉnh màu chữ kéo thả */
+
     [data-testid="stFileUploadDropzoneInstructions"] small {
-        display: none !important; 
+        display: none !important;
     }
     [data-testid="stFileUploadDropzoneInstructions"] div,
     [data-testid="stFileUploadDropzoneInstructions"] span {
-        color: #f8fafc !important; 
+        color: #f8fafc !important;
         font-size: 15px !important;
     }
 
-    /* =========================================
-       TIÊU ĐỀ & CÁC THÀNH PHẦN KHÁC
-       ========================================= */
-       
     h1, h2, h3 {
         background: linear-gradient(90deg, #ff2e93, #dcb8ff);
         -webkit-background-clip: text;
@@ -147,16 +134,15 @@ st.markdown(
         font-weight: 600;
     }
 
-    /* Ô NHẬP TIN NHẮN */
     .stTextArea textarea {
         background-color: #1f2937 !important;
         border: 1px solid #4b5563 !important;
-        color: #ffffff !important; 
+        color: #ffffff !important;
         border-radius: 12px !important;
         font-size: 16px !important;
     }
     .stTextArea textarea::placeholder {
-        color: #9ca3af !important; 
+        color: #9ca3af !important;
         opacity: 1 !important;
     }
     .stTextArea textarea:focus {
@@ -164,8 +150,8 @@ st.markdown(
         box-shadow: 0 0 0 1px #dcb8ff !important;
     }
 
-    /* NÚT BẤM CHÍNH (TẠO LINK) */
-    div.stButton > button[kind="primary"] {
+    div.stButton > button[kind="primary"],
+    div.stDownloadButton > button {
         background: linear-gradient(90deg, #dcb8ff, #ff9ee0) !important;
         color: #111319 !important;
         border-radius: 10px !important;
@@ -175,11 +161,12 @@ st.markdown(
         border: none !important;
         transition: all 0.2s ease !important;
     }
-    div.stButton > button[kind="primary"]:hover {
+    div.stButton > button[kind="primary"]:hover,
+    div.stDownloadButton > button:hover {
         filter: brightness(1.08);
         transform: translateY(-2px);
     }
-    
+
     div.stButton > button[kind="secondary"] {
         background: transparent !important;
         color: #9ca3af !important;
@@ -223,40 +210,40 @@ st.markdown(
 
 
 # ============================================================
-# BỘ NHỚ RAM TẠM THỜI (STORE)
+# BỘ NHỚ RAM TẠM THỜI & KHÓA LUỒNG (THREAD-SAFE STORE)
 # ============================================================
 
 @st.cache_resource
-def get_memory_store():
-    return {}
-
-store = get_memory_store()
+def get_store_and_lock() -> Tuple[Dict[str, Dict[str, Any]], threading.Lock]:
+    return {}, threading.Lock()
 
 
-def cleanup_expired_entries():
-    now = time.time()
-    expired_ids = []
-    for mid, entry in store.items():
-        if not isinstance(entry, dict) or "created" not in entry or "data" not in entry:
-            expired_ids.append(mid)
-            continue
-        if now - entry["created"] > LINK_TTL_SECONDS:
-            expired_ids.append(mid)
-    for mid in expired_ids:
-        store.pop(mid, None)
+STORE, STORE_LOCK = get_store_and_lock()
 
 
-def enforce_store_capacity():
-    if len(store) >= MAX_STORE_ENTRIES:
-        oldest_id = min(store, key=lambda mid: store[mid]["created"])
-        store.pop(oldest_id, None)
+def get_share_base_url() -> str:
+    configured = os.environ.get("BASE_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
 
-cleanup_expired_entries()
+    codespace_name = os.environ.get("CODESPACE_NAME", "").strip()
+    forwarding_domain = os.environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "").strip()
+    if codespace_name and forwarding_domain:
+        port = os.environ.get("PORT", "8501").strip()
+        return f"https://{codespace_name}-{port}.{forwarding_domain}".rstrip("/")
 
+    try:
+        headers = st.context.headers
+        if headers:
+            host = headers.get("X-Forwarded-Host") or headers.get("Host") or ""
+            proto = (headers.get("X-Forwarded-Proto") or "https").split(",", 1)[0].strip()
+            if host and not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+                return f"{proto}://{host}".rstrip("/")
+    except Exception:
+        pass
 
-# ============================================================
-# HÀM TIỆN ÍCH & SESSION
-# ============================================================
+    return DEFAULT_BASE_URL.rstrip("/")
+
 
 def format_size(size_bytes: int) -> str:
     if size_bytes < 1024:
@@ -265,14 +252,40 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024:.1f} KB"
     return f"{size_bytes / (1024 * 1024):.2f} MB"
 
+
+def cleanup_expired_entries():
+    now = time.time()
+    expired_ids = []
+    for msg_id, entry in list(STORE.items()):
+        if not isinstance(entry, dict) or "created" not in entry or "data" not in entry:
+            expired_ids.append(msg_id)
+            continue
+        if now - entry["created"] > LINK_TTL_SECONDS:
+            expired_ids.append(msg_id)
+    for msg_id in expired_ids:
+        STORE.pop(msg_id, None)
+
+
+def enforce_store_capacity():
+    if len(STORE) >= MAX_STORE_ENTRIES:
+        oldest_id = min(STORE, key=lambda mid: STORE[mid]["created"])
+        STORE.pop(oldest_id, None)
+
+
+# ============================================================
+# KHỞI TẠO SESSION STATE
+# ============================================================
+
 if "generated_link" not in st.session_state:
     st.session_state.generated_link = ""
 if "generated_message_id" not in st.session_state:
     st.session_state.generated_message_id = ""
+if "decrypted_cache" not in st.session_state:
+    st.session_state.decrypted_cache = {}
 
 
 # ============================================================
-# ĐỌC URL
+# ĐỌC THAM SỐ URL
 # ============================================================
 
 query_params = st.query_params
@@ -281,69 +294,73 @@ url_secret = query_params.get("secret", "")
 
 
 # ============================================================
-# LUỒNG NGƯỜI NHẬN (ĐÃ BỎ BƯỚC XÁC NHẬN)
+# LUỒNG NGƯỜI NHẬN (AN TOÀN THREAD-LOCK & CHỈ XÓA KHI GIẢI MÃ ĐÚNG)
 # ============================================================
 
 if url_id and url_secret:
-
     st.title("📬 Tin nhắn tự động xóa sau khi xem!")
-
     st.markdown(
-        """
-        <p class="subtitle">
-        Đường link sẽ <b>tự động hủy ngay sau khi mở</b>.
-        </p>
-        """,
-        unsafe_allow_html=True
+        '<p class="subtitle">Đường link sẽ <b>tự động hủy ngay sau khi mở</b>.</p>',
+        unsafe_allow_html=True,
     )
 
-    if url_id not in store:
-        st.error("❌ Dữ liệu đã bị xóa, vui lòng mở download để xem file!")
+    payload = None
+    error_msg = ""
+
+    # Nếu đã giải mã trong phiên hiện tại (khi bấm nút Tải file), lấy lại từ session_state
+    if url_id in st.session_state.decrypted_cache:
+        payload = st.session_state.decrypted_cache[url_id]
     else:
-        # BỐC HƠI DỮ LIỆU NGAY LẬP TỨC KHI VỪA VÀO TRANG
-        encrypted_entry = store.pop(url_id, None)
+        with STORE_LOCK:
+            cleanup_expired_entries()
+            entry = STORE.get(url_id)
 
-        if not isinstance(encrypted_entry, dict) or "data" not in encrypted_entry:
-            st.error("❌ Dữ liệu vừa bị lấy đi, đã hết hạn hoặc không hợp lệ.")
-        else:
+            if entry is None or not isinstance(entry, dict) or "data" not in entry:
+                error_msg = "❌ File đã bị xóa hoặc link hết hạn."
+            else:
+                try:
+                    decrypted_bytes = Fernet(url_secret.encode("ascii")).decrypt(entry["data"])
+                    payload = json.loads(decrypted_bytes.decode("utf-8"))
+                    # Chỉ xóa khỏi STORE sau khi giải mã thành công (như logic bản Flask)
+                    STORE.pop(url_id, None)
+                    st.session_state.decrypted_cache[url_id] = payload
+                except (InvalidToken, ValueError, TypeError, UnicodeError, binascii.Error):
+                    error_msg = "❌ Khóa truy cập không hợp lệ."
+                except Exception:
+                    error_msg = "❌ Đã có lỗi xảy ra khi xử lý dữ liệu."
+
+    if error_msg:
+        st.error(error_msg)
+    elif payload is not None:
+        st.success("✅ Đã giải mã thành công! Dữ liệu đã bị xóa khỏi máy chủ.")
+        st.write("---")
+
+        msg_text = payload.get("text", "")
+        if msg_text:
+            safe_text = html.escape(msg_text)
+            st.markdown(f'<div class="message-box">{safe_text}</div>', unsafe_allow_html=True)
+
+        filename = payload.get("filename", "")
+        filedata_b64 = payload.get("filedata", "")
+        mime_type = payload.get("mime_type", "application/octet-stream")
+
+        if filename and filedata_b64:
             try:
-                cipher = Fernet(url_secret.encode("ascii"))
-                decrypted = cipher.decrypt(encrypted_entry["data"])
-                payload = json.loads(decrypted.decode("utf-8"))
-
-                st.success("✅ Đã giải mã thành công! Dữ liệu đã bị xóa khỏi máy chủ.")
-                st.write("---")
-
-                msg_text = payload.get("text", "")
-                if msg_text:
-                    safe_text = html.escape(msg_text)
-                    st.markdown(f'<div class="message-box">{safe_text}</div>', unsafe_allow_html=True)
-
-                filename = payload.get("filename", "")
-                filedata_b64 = payload.get("filedata", "")
-                mime_type = payload.get("mime_type", "application/octet-stream")
-
-                if filename and filedata_b64:
-                    try:
-                        raw_data = base64.b64decode(filedata_b64, validate=True)
-                        st.download_button(
-                            label=f"⬇️ Tải file: {filename}",
-                            data=raw_data,
-                            file_name=filename,
-                            mime=mime_type,
-                            type="primary",
-                            use_container_width=True,
-                        )
-                    except Exception:
-                        st.error("❌ Không thể đọc tệp đính kèm.")
-
-            except InvalidToken:
-                st.error("❌ Khóa giải mã không hợp lệ hoặc dữ liệu bị hỏng.")
-            except Exception:
-                st.error("❌ Đã có lỗi xảy ra khi xử lý dữ liệu.")
+                raw_data = base64.b64decode(filedata_b64, validate=True)
+                st.download_button(
+                    label=f"⬇️ Tải file: {filename} ({format_size(len(raw_data))})",
+                    data=raw_data,
+                    file_name=filename,
+                    mime=mime_type,
+                    type="primary",
+                    use_container_width=True,
+                )
+            except (binascii.Error, ValueError):
+                st.error("❌ Không thể đọc tệp đính kèm.")
 
     st.write("---")
     if st.button("🏠 Trở về trang chủ", type="secondary", use_container_width=True):
+        st.session_state.decrypted_cache.pop(url_id, None)
         st.query_params.clear()
         st.rerun()
 
@@ -355,14 +372,9 @@ if url_id and url_secret:
 else:
     if not st.session_state.generated_link:
         st.title("🌌 TIN NHẮN TỰ ĐỘNG XÓA")
-
         st.markdown(
-            """
-            <p class="subtitle">
-            Link sẽ tự động hủy ngay sau khi được mở và tự hết hạn sau 24 giờ nếu không ai mở.
-            </p>
-            """,
-            unsafe_allow_html=True
+            '<p class="subtitle">Link sẽ tự động hủy ngay sau khi được mở và tự hết hạn sau 24 giờ nếu không ai mở.</p>',
+            unsafe_allow_html=True,
         )
 
         st.markdown(
@@ -379,106 +391,102 @@ else:
 
         uploaded_file = st.file_uploader(
             f"Kéo thả hoặc chọn file để gửi (tối đa {format_size(MAX_FILE_SIZE_BYTES)})",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
 
         text_input = st.text_area(
             "Hoặc nhập tin nhắn văn bản:",
             height=120,
-            placeholder="Ghi chú bí mật của bạn...",
+            placeholder="Bạn muốn gửi gì đi kèm?",
         )
 
         st.write("")
         if st.button("Tạo link chia sẻ", type="primary", use_container_width=True):
-            cleanup_expired_entries()
+            message = text_input.strip()
+            has_file = uploaded_file is not None and bool(uploaded_file.name)
 
-            if not text_input.strip() and uploaded_file is None:
-                st.warning("Vui lòng đính kèm file hoặc nhập tin nhắn.")
-            elif uploaded_file is not None and (uploaded_file.size or 0) > MAX_FILE_SIZE_BYTES:
+            if not message and not has_file:
+                st.warning("Vui lòng chọn file hoặc nhập tin nhắn.")
+            elif has_file and (uploaded_file.size or 0) > MAX_FILE_SIZE_BYTES:
                 st.error(
                     f"❌ File quá lớn ({format_size(uploaded_file.size)}). "
-                    f"Giới hạn tối đa là {format_size(MAX_FILE_SIZE_BYTES)}."
+                    f"Giới hạn tối đa {format_size(MAX_FILE_SIZE_BYTES)}."
                 )
             else:
                 try:
-                    enforce_store_capacity()
-
                     message_id = str(uuid.uuid4())
                     secret_key = Fernet.generate_key()
 
                     file_b64 = ""
                     filename = ""
-                    mime_type = ""
+                    mime_type = "application/octet-stream"
                     file_size = 0
 
-                    if uploaded_file is not None:
-                        file_size = uploaded_file.size or 0
-                        raw_file = uploaded_file.getvalue()
-                        file_b64 = base64.b64encode(raw_file).decode("ascii")
+                    if has_file:
+                        file_bytes = uploaded_file.getvalue()
+                        file_b64 = base64.b64encode(file_bytes).decode("ascii")
                         filename = uploaded_file.name
                         mime_type = uploaded_file.type or "application/octet-stream"
+                        file_size = len(file_bytes)
 
                     payload = {
-                        "text": text_input.strip(),
+                        "text": message,
                         "filename": filename,
                         "mime_type": mime_type,
                         "filedata": file_b64,
                         "filesize": file_size,
                     }
 
-                    plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                    cipher = Fernet(secret_key)
-                    encrypted_payload = cipher.encrypt(plaintext)
+                    encrypted_payload = Fernet(secret_key).encrypt(
+                        json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                    )
 
-                    store[message_id] = {
-                        "data": encrypted_payload,
-                        "created": time.time(),
-                    }
+                    with STORE_LOCK:
+                        cleanup_expired_entries()
+                        enforce_store_capacity()
+                        STORE[message_id] = {
+                            "data": encrypted_payload,
+                            "created": time.time(),
+                        }
 
+                    share_base_url = get_share_base_url()
                     params = {
                         "id": message_id,
                         "secret": secret_key.decode("ascii"),
                     }
-
-                    full_link = (
-                        BASE_URL.rstrip("/")
-                        + "/?"
-                        + urllib.parse.urlencode(params)
-                    )
+                    full_link = f"{share_base_url}/?{urllib.parse.urlencode(params)}"
 
                     st.session_state.generated_link = full_link
                     st.session_state.generated_message_id = message_id
                     st.rerun()
-
                 except Exception:
-                    st.error("❌ Không thể tạo link.")
+                    st.error("❌ Không thể tạo link, vui lòng thử lại.")
 
     else:
-        st.title("✅ Thành công!")
-
+        st.title("✅ Link đã tạo!")
         st.markdown(
             """
             <p class="subtitle">
-            Copy link để chia sẻ. Dữ liệu sẽ <b>tự động hủy</b> ngay sau lần tải đầu tiên,
+            Copy link để chia sẻ. Dữ liệu sẽ <b>tự động hủy</b> ngay sau lần mở đầu tiên,
             hoặc tự hết hạn sau 24 giờ nếu không có ai mở.
             </p>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
         st.code(st.session_state.generated_link, language="text")
-
         st.write("---")
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("✏️ Tạo mật thư mới", type="primary", use_container_width=True):
+            if st.button("✏️ Tạo link mới", type="primary", use_container_width=True):
                 st.session_state.generated_link = ""
                 st.session_state.generated_message_id = ""
                 st.rerun()
         with col2:
             if st.button("🗑️ Hủy Link Ngay Lập Tức", type="secondary", use_container_width=True):
-                store.pop(st.session_state.generated_message_id, None)
+                with STORE_LOCK:
+                    STORE.pop(st.session_state.generated_message_id, None)
                 st.session_state.generated_link = ""
                 st.session_state.generated_message_id = ""
                 st.rerun()
